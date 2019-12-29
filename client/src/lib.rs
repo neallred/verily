@@ -12,16 +12,21 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use flate2::read::GzDecoder;
 use std::io::prelude::*;
-// use std::collections::HashSet;
+use std::collections::HashSet;
+use std::collections::HashMap;
 // use std::error::Error;
+extern crate rust_stemmers;
+use rust_stemmers::{Algorithm, Stemmer};
 
-// extern crate web_sys;
-// use web_sys::console;
-// macro_rules! log {
-//     ( $( $t:tt )* ) => {
-//         console::log_1(&format!( $( $t )* ).into());
-//     }
-// }
+
+extern crate web_sys;
+use web_sys::console;
+use regex::Regex;
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        console::log_1(&format!( $( $t )* ).into());
+    }
+}
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -76,18 +81,77 @@ lazy_static! {
     static ref NEW_TESTAMENT: scripture_types::NewTestament = parse_gzip(&BYTES_NEW_TESTAMENT);
     static ref PEARL_OF_GREAT_PRICE: scripture_types::PearlOfGreatPrice = parse_gzip(&BYTES_PEARL_OF_GREAT_PRICE);
     static ref DOCTRINE_AND_COVENANTS: scripture_types::DoctrineAndCovenants = parse_gzip(&BYTES_DOCTRINE_AND_COVENANTS);
+    static ref IDX: (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) = build_index();
 }
 
+fn build_index() -> (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) {
+    let zero: u32 = 0;
+    let mut scripture_id: u32 = 0;
 
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
+    let re_verse_chars = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
+    let en_stemmer = Stemmer::create(Algorithm::English);
+
+    let dc_results: HashMap<String, HashSet<u32>> = (&*DOCTRINE_AND_COVENANTS).sections.iter()
+        .flat_map(|section| &section.verses)
+        .fold(
+            HashMap::new(),
+            |acc, verse| {
+                scripture_id += 1;
+                let replaced_text = verse
+                    .text
+                    .replace("–", " ")
+                    .replace("—", " ")
+                    .replace("—", " ")
+                    .replace("'s", "")
+                    .to_lowercase();
+
+                let regged_text = re_verse_chars.replace_all(&replaced_text, "");
+
+
+                regged_text 
+                    .split_whitespace()
+                    .fold(
+                        acc,
+                        |mut acc_inner, word| {
+                            let stemmed = en_stemmer.stem(word);
+
+                            acc_inner.insert(
+                                stemmed.to_string(),
+                                match acc_inner.get(&stemmed.to_string()) {
+                                    Some(x) => {
+                                        let mut bob = x.clone();
+                                        bob.insert(scripture_id);
+                                        bob
+                                        // x
+                                    }, // x + 1,
+                                    None => {
+                                        let mut bob = HashSet::new();
+                                        bob.insert(scripture_id);
+                                        bob
+                                    },// .insert() zero + 1
+                                }
+                            );
+                            acc_inner
+                        }
+                    )
+            }
+        );
+
+    (dc_results, HashMap::new())
+
 }
 
 // enum AndOr {
 //     And = 1,
 //     Or = 0,
 // }
+enum VersePath {
+    PathBoM,
+    PathOT,
+    PathNT,
+    PathPOGP,
+    PathDC(u16, u16), // section verse
+}
 
 fn format_verse(v: &scripture_types::Verse) -> String {
     format!("{}: {}", &v.reference, &v.text)
@@ -136,6 +200,7 @@ pub fn bootstrap_searcher() {
         String::from("BOOSTRAP SEARCHER BOOSTRAP SEARCHER BOOSTRAP SEARCHER"),
         JsValue::from_serde(&empty_preferences).unwrap(),
     );
+    // log!("{:?}", (IDX.0));
 }
 
 #[wasm_bindgen]
