@@ -84,18 +84,29 @@ lazy_static! {
     static ref IDX: (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) = build_index();
 }
 
-fn build_index() -> (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) {
-    let zero: u32 = 0;
+type WordsIndex = HashMap<String, HashSet<u32>>;
+type PathsIndex = HashMap<u32, VersePath>;
+
+fn build_index() -> (WordsIndex, PathsIndex) {
     let mut scripture_id: u32 = 0;
 
     let re_verse_chars = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
     let en_stemmer = Stemmer::create(Algorithm::English);
 
-    let dc_results: HashMap<String, HashSet<u32>> = (&*DOCTRINE_AND_COVENANTS).sections.iter()
-        .flat_map(|section| &section.verses)
+    let with_section_nums: Vec<(&u64, &scripture_types::Verse)> = (&*DOCTRINE_AND_COVENANTS).sections.iter()
+        .flat_map(|section| {
+            let with_section_nums: Vec<(&u64, &scripture_types::Verse)> = section.verses.iter().map(|v| (&section.section, v)).collect();
+
+            with_section_nums
+        })
+        .collect();
+
+    let indices: (WordsIndex, PathsIndex) = (HashMap::new(), HashMap::new());
+
+    let (words, paths): (WordsIndex, PathsIndex) = with_section_nums.iter()
         .fold(
-            HashMap::new(),
-            |acc, verse| {
+            indices,
+            |mut acc, (section_num, verse)| {
                 scripture_id += 1;
                 let replaced_text = verse
                     .text
@@ -104,14 +115,14 @@ fn build_index() -> (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) {
                     .replace("—", " ")
                     .replace("'s", "")
                     .to_lowercase();
+                acc.1.insert(scripture_id, VersePath::PathDC(**section_num as u8, verse.verse as u8));
 
                 let regged_text = re_verse_chars.replace_all(&replaced_text, "");
 
-
-                regged_text 
+                let added_words = regged_text 
                     .split_whitespace()
                     .fold(
-                        acc,
+                        acc.0,
                         |mut acc_inner, word| {
                             let stemmed = en_stemmer.stem(word);
 
@@ -119,25 +130,87 @@ fn build_index() -> (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) {
                                 stemmed.to_string(),
                                 match acc_inner.get(&stemmed.to_string()) {
                                     Some(x) => {
-                                        let mut bob = x.clone();
-                                        bob.insert(scripture_id);
-                                        bob
-                                        // x
-                                    }, // x + 1,
+                                        let mut verses_using_word = x.clone();
+                                        verses_using_word.insert(scripture_id);
+                                        verses_using_word
+                                    },
                                     None => {
-                                        let mut bob = HashSet::new();
-                                        bob.insert(scripture_id);
-                                        bob
-                                    },// .insert() zero + 1
+                                        let mut verses_using_word = HashSet::new();
+                                        verses_using_word.insert(scripture_id);
+                                        verses_using_word
+                                    },
                                 }
                             );
                             acc_inner
                         }
-                    )
+                    );
+                (added_words, acc.1)
             }
         );
 
-    (dc_results, HashMap::new())
+
+    let with_ot_books: Vec<(&String, &scripture_types::Chapter)> = (&*OLD_TESTAMENT).books.iter()
+        .flat_map(|book| {
+            let with_books: Vec<(&String, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (&book.book, cs)).collect();
+
+            with_books
+        })
+        .collect();
+
+    let with_ot_chapters: Vec<(&String, &u64, &scripture_types::Verse)> = with_ot_books.iter()
+        .flat_map(|(book_title, chapter)| {
+            let with_verses: Vec<(&String, &u64, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*book_title, &chapter.chapter, v)).collect();
+
+            with_verses
+        })
+        .collect();
+
+    let (words, paths): (WordsIndex, PathsIndex) = with_ot_chapters.iter()
+        .fold(
+            (words, paths),
+            |mut acc, (book_title, chapter_num, verse)| {
+                scripture_id += 1;
+                let replaced_text = verse
+                    .text
+                    .replace("–", " ")
+                    .replace("—", " ")
+                    .replace("—", " ")
+                    .replace("'s", "")
+                    .to_lowercase();
+                acc.1.insert(scripture_id, VersePath::PathOT(book_title.to_string(), **chapter_num as u8, verse.verse as u8));
+
+                let regged_text = re_verse_chars.replace_all(&replaced_text, "");
+
+                let added_words = regged_text 
+                    .split_whitespace()
+                    .fold(
+                        acc.0,
+                        |mut words_inner, word| {
+                            let stemmed = en_stemmer.stem(word);
+
+                            words_inner.insert(
+                                stemmed.to_string(),
+                                match words_inner.get(&stemmed.to_string()) {
+                                    Some(x) => {
+                                        let mut verses_using_word = x.clone();
+                                        verses_using_word.insert(scripture_id);
+                                        verses_using_word
+                                    },
+                                    None => {
+                                        let mut verses_using_word = HashSet::new();
+                                        verses_using_word.insert(scripture_id);
+                                        verses_using_word
+                                    },
+                                }
+                            );
+                            words_inner
+                        }
+                    );
+                (added_words, acc.1)
+            }
+        );
+
+    (words, paths)
 
 }
 
@@ -145,12 +218,13 @@ fn build_index() -> (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) {
 //     And = 1,
 //     Or = 0,
 // }
-enum VersePath {
+#[derive(Debug)]
+pub enum VersePath {
     PathBoM,
-    PathOT,
+    PathOT(String, u8, u8),
     PathNT,
     PathPOGP,
-    PathDC(u16, u16), // section verse
+    PathDC(u8, u8), // section verse
 }
 
 fn format_verse(v: &scripture_types::Verse) -> String {
@@ -200,7 +274,8 @@ pub fn bootstrap_searcher() {
         String::from("BOOSTRAP SEARCHER BOOSTRAP SEARCHER BOOSTRAP SEARCHER"),
         JsValue::from_serde(&empty_preferences).unwrap(),
     );
-    // log!("{:?}", (IDX.0));
+    log!("words: {:?}, {:?}", IDX.0.len(), IDX.0);
+    log!("paths: {:?}, {:?}", IDX.1.len(), IDX.1);
 }
 
 #[wasm_bindgen]
