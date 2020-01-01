@@ -3,8 +3,22 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug)]
+pub type WordsIndex = HashMap<String, HashSet<u32>>;
+pub type PathsIndex = HashMap<u32, VersePath>;
+
+#[derive(Serialize, Deserialize)]
+pub enum VersePath {
+    PathBoM(String, u8, u8),
+    PathOT(String, u8, u8),
+    PathNT(String, u8, u8),
+    PathPOGP(String, u8, u8),
+    PathDC(u8, u8), // section verse
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Verse {
     pub heading: Option<String>,
     pub pilcrow: Option<bool>,
@@ -14,7 +28,7 @@ pub struct Verse {
     pub verse: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Chapter {
     pub chapter: u64,
     pub heading: Option<String>,
@@ -23,7 +37,7 @@ pub struct Chapter {
     pub verses: Vec<Verse>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Facsimile {
     explanations: Vec<String>,
     image_url: String,
@@ -33,7 +47,7 @@ pub struct Facsimile {
     title: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Book {
     pub book: String,
     pub chapters: Vec<Chapter>,
@@ -46,7 +60,7 @@ pub struct Book {
 }
 
 // structs
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Section {
     pub section: u64,
     pub reference: String,
@@ -54,7 +68,7 @@ pub struct Section {
     pub signature: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BookOfMormon {
     pub books: Vec<Book>,
     pub last_modified: String,
@@ -66,7 +80,7 @@ pub struct BookOfMormon {
     pub version: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct TitlePage {
     pub subtitle: String,
     pub text: Vec<String>,
@@ -74,14 +88,14 @@ pub struct TitlePage {
     pub translated_by: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Testimony {
     text: String,
     title: String,
     witnesses: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DoctrineAndCovenants {
     pub last_modified: String,
     pub lds_slug: String,
@@ -92,14 +106,14 @@ pub struct DoctrineAndCovenants {
     pub version: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct NewTestamentTitlePage {
     subtitle: String,
     text: String,
     title: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct NewTestament {
     pub books: Vec<Book>,
     pub last_modified: String,
@@ -109,7 +123,7 @@ pub struct NewTestament {
     pub version: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct OldTestament {
     pub books: Vec<Book>,
     pub last_modified: String,
@@ -119,7 +133,7 @@ pub struct OldTestament {
     pub version: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct PearlOfGreatPrice {
     pub books: Vec<Book>,
     pub last_modified: String,

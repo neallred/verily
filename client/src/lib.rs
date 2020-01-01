@@ -4,6 +4,9 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate scripture_types;
+extern crate rust_stemmers;
+use rust_stemmers::{Algorithm, Stemmer};
+use regex::Regex;
 
 #[macro_use]
 extern crate lazy_static;
@@ -13,15 +16,11 @@ use wasm_bindgen::prelude::*;
 use flate2::read::GzDecoder;
 use std::io::prelude::*;
 use std::collections::HashSet;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 // use std::error::Error;
-extern crate rust_stemmers;
-use rust_stemmers::{Algorithm, Stemmer};
-
 
 extern crate web_sys;
 use web_sys::console;
-use regex::Regex;
 macro_rules! log {
     ( $( $t:tt )* ) => {
         console::log_1(&format!( $( $t )* ).into());
@@ -73,6 +72,9 @@ static BYTES_BOOK_OF_MORMON: &'static [u8] = include_bytes!("../../data-bundler/
 static BYTES_DOCTRINE_AND_COVENANTS: &'static [u8] = include_bytes!("../../data-bundler/data/doctrine-and-covenants.json.gz");
 static BYTES_PEARL_OF_GREAT_PRICE: &'static [u8] = include_bytes!("../../data-bundler/data/pearl-of-great-price.json.gz");
 
+static BYTES_WORDS_INDEX: &'static [u8] = include_bytes!("../../data-bundler/data/words-index.json.gz");
+static BYTES_PATHS_INDEX: &'static [u8] = include_bytes!("../../data-bundler/data/paths-index.json.gz");
+
 // TODO: Figure out to do this one, at compile time.
 lazy_static! {
     static ref BOOK_OF_MORMON: scripture_types::BookOfMormon = parse_gzip(&BYTES_BOOK_OF_MORMON);
@@ -80,173 +82,10 @@ lazy_static! {
     static ref NEW_TESTAMENT: scripture_types::NewTestament = parse_gzip(&BYTES_NEW_TESTAMENT);
     static ref PEARL_OF_GREAT_PRICE: scripture_types::PearlOfGreatPrice = parse_gzip(&BYTES_PEARL_OF_GREAT_PRICE);
     static ref DOCTRINE_AND_COVENANTS: scripture_types::DoctrineAndCovenants = parse_gzip(&BYTES_DOCTRINE_AND_COVENANTS);
-    static ref IDX: (HashMap<String, HashSet<u32>>, HashMap<u32, VersePath>) = build_index();
-}
-
-type WordsIndex = HashMap<String, HashSet<u32>>;
-type PathsIndex = HashMap<u32, VersePath>;
-
-pub enum HasBooks {
-    OT(&'static scripture_types::OldTestament),
-    NT(&'static scripture_types::NewTestament),
-    BOM(&'static scripture_types::BookOfMormon),
-    POGP(&'static scripture_types::PearlOfGreatPrice),
-}
-
-fn prepare_book_paths(coll: HasBooks) -> Vec<(&'static String, u8, &'static scripture_types::Verse)> {
-    let books = match coll {
-        HasBooks::OT(x) => &x.books,
-        HasBooks::NT(x) => &x.books,
-        HasBooks::BOM(x) => &x.books,
-        HasBooks::POGP(x) => &x.books,
-    };
-    let with_books: Vec<(&String, &scripture_types::Chapter)> = books.iter()
-        .flat_map(|book| {
-            let with_books: Vec<(&String, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (&book.book, cs)).collect();
-
-            with_books
-        })
-        .collect();
-
-    let with_chapters = with_books.iter()
-        .flat_map(|(title, chapter)| {
-            let with_verses: Vec<(&String, u8, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*title, chapter.chapter as u8, v)).collect();
-
-            with_verses
-        })
-        .collect();
-
-
-    with_chapters
-}
-
-fn build_index() -> (WordsIndex, PathsIndex) {
-    let mut scripture_id: u32 = 0;
-
-    let re_verse_chars: Regex = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
-    let en_stemmer = Stemmer::create(Algorithm::English);
-
-    let make_splittable = |text: &String| -> String {
-        let with_substitutions = text
-            .replace("–", " ")
-            .replace("—", " ")
-            .replace("—", " ")
-            .replace("'s", "")
-            .to_lowercase();
-        let splittable = re_verse_chars.replace_all(&with_substitutions, "");
-        splittable.to_string() 
-    };
-
-    let indices: (WordsIndex, PathsIndex) = (HashMap::new(), HashMap::new());
-
-    let count_word_usage = |mut words_index: WordsIndex, word: &str, id| {
-        let stemmed = en_stemmer.stem(word);
-
-        words_index.insert(
-            stemmed.to_string(),
-            match words_index.get(&stemmed.to_string()) {
-                Some(x) => {
-                    let mut verses_using_word = x.clone();
-                    verses_using_word.insert(id);
-                    verses_using_word
-                },
-                None => {
-                    let mut verses_using_word = HashSet::new();
-                    verses_using_word.insert(id);
-                    verses_using_word
-                },
-            }
-        );
-        words_index
-    };
-
-    let count_verse = |verse_text: &String, words_index: WordsIndex, id| {
-        let index_with_verse_added = make_splittable(verse_text)
-            .split_whitespace()
-            .fold(
-                words_index,
-                |acc, word| count_word_usage(acc, word, id) 
-            );
-        index_with_verse_added
-    };
-
-    // Doctrine and Covenants
-    let with_section_nums: Vec<(u8, &scripture_types::Verse)> = (&*DOCTRINE_AND_COVENANTS).sections.iter()
-        .flat_map(|section| {
-            let with_section_nums: Vec<(u8, &scripture_types::Verse)> = section.verses.iter().map(|v| (section.section as u8, v)).collect();
-
-            with_section_nums
-        })
-        .collect();
-
-    let indices = with_section_nums.iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (section_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, VersePath::PathDC(*section_num, verse.verse as u8));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
-
-    // Old Testament
-    let indices = prepare_book_paths(HasBooks::OT(&*OLD_TESTAMENT)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, VersePath::PathOT(title.to_string(), *chapter_num, verse.verse as u8));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
-
-    // New Testament
-    let indices = prepare_book_paths(HasBooks::NT(&*NEW_TESTAMENT)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, VersePath::PathNT(title.to_string(), *chapter_num, verse.verse as u8));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
-
-    // Book of Mormon
-    let indices = prepare_book_paths(HasBooks::BOM(&*BOOK_OF_MORMON)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, VersePath::PathBoM(title.to_string(), *chapter_num, verse.verse as u8));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
-
-    // Pearl of Great Price
-    let indices = prepare_book_paths(HasBooks::POGP(&*PEARL_OF_GREAT_PRICE)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, VersePath::PathPOGP(title.to_string(), *chapter_num, verse.verse as u8));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
-
-    indices
-}
-
-// enum AndOr {
-//     And = 1,
-//     Or = 0,
-// }
-#[derive(Debug)]
-pub enum VersePath {
-    PathBoM(String, u8, u8),
-    PathOT(String, u8, u8),
-    PathNT(String, u8, u8),
-    PathPOGP(String, u8, u8),
-    PathDC(u8, u8), // section verse
+    static ref WORDS_INDEX: scripture_types::WordsIndex = parse_gzip(&BYTES_WORDS_INDEX);
+    static ref PATHS_INDEX: scripture_types::PathsIndex = parse_gzip(&BYTES_PATHS_INDEX);
+    static ref STEMMER: rust_stemmers::Stemmer = Stemmer::create(Algorithm::English);
+    static ref RE_VERSE_CHARS: Regex = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
 }
 
 fn format_verse(v: &scripture_types::Verse) -> String {
@@ -296,8 +135,19 @@ pub fn bootstrap_searcher() {
         String::from("BOOSTRAP SEARCHER BOOSTRAP SEARCHER BOOSTRAP SEARCHER"),
         JsValue::from_serde(&empty_preferences).unwrap(),
     );
-    log!("words: {:?}", IDX.0.len());
-    log!("paths: {:?}", IDX.1.len());
+    log!("words: {:?}", WORDS_INDEX.len());
+    log!("paths: {:?}", PATHS_INDEX.len());
+}
+
+fn make_splittable(text: &String) -> String {
+    let with_substitutions = text
+        .replace("–", " ")
+        .replace("—", " ")
+        .replace("—", " ")
+        .replace("'s", "")
+        .to_lowercase();
+    let splittable = RE_VERSE_CHARS.replace_all(&with_substitutions, "");
+    splittable.to_string() 
 }
 
 #[wasm_bindgen]
@@ -314,6 +164,25 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     };
 
     let mut results: Vec<String> = vec![];
+    let empty = HashSet::new();
+    let empty_forever = HashSet::new();
+
+    let stemmed_search = STEMMER.stem(search_term);
+
+    let bob = || {
+        let result = make_splittable(search_term).split_whitespace().fold(
+            empty,
+            |mut acc, word| {
+                let index_results = match (&*WORDS_INDEX).get(word) {
+                    Some(x) => x,
+                    None => &empty_forever,
+                };
+                index_results
+            }
+        );
+        result
+    };
+    let index_results = bob();
 
     if search_preferences.included_sources.ot {
         let mut ot_results: Vec<String> = (&*OLD_TESTAMENT).books.iter()

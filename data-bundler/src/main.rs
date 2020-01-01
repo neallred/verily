@@ -1,4 +1,5 @@
 extern crate scripture_types;
+extern crate rust_stemmers;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::BufWriter;
@@ -8,12 +9,179 @@ use std::path::Path;
 use std::io::prelude::*;
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use std::collections::HashSet;
+use std::collections::HashMap;
+use rust_stemmers::{Algorithm, Stemmer};
+use regex::Regex;
 
 #[cfg(windows)]
 pub const NPM: &'static str = "npm.cmd";
 
 #[cfg(not(windows))]
 pub const NPM: &'static str = "npm";
+
+pub enum HasBooks<'a> {
+    OT(&'a scripture_types::OldTestament),
+    NT(&'a scripture_types::NewTestament),
+    BOM(&'a scripture_types::BookOfMormon),
+    POGP(&'a scripture_types::PearlOfGreatPrice),
+}
+
+fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(&'a String, u8, &'a scripture_types::Verse)> {
+    let (books, title) = match coll {
+        HasBooks::OT(x) => (&x.books, &x.title),
+        HasBooks::NT(x) => (&x.books, &x.title),
+        HasBooks::BOM(x) => (&x.books, &x.title),
+        HasBooks::POGP(x) => (&x.books, &x.title),
+    };
+    println!("    {}", title);
+    let with_books: Vec<(&String, &scripture_types::Chapter)> = books.iter()
+        .flat_map(|book| {
+            let with_books: Vec<(&String, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (&book.book, cs)).collect();
+
+            with_books
+        })
+        .collect();
+
+    let with_chapters = with_books.iter()
+        .flat_map(|(title, chapter)| {
+            let with_verses: Vec<(&String, u8, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*title, chapter.chapter as u8, v)).collect();
+
+            with_verses
+        })
+        .collect();
+
+
+    with_chapters
+}
+
+fn build_index(
+    ot: scripture_types::OldTestament,
+    nt: scripture_types::NewTestament,
+    bom: scripture_types::BookOfMormon,
+    dc: scripture_types::DoctrineAndCovenants,
+    pogp: scripture_types::PearlOfGreatPrice,
+) -> (scripture_types::WordsIndex, scripture_types::PathsIndex) {
+    let mut scripture_id: u32 = 0;
+
+    let re_verse_chars: Regex = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
+    let en_stemmer = Stemmer::create(Algorithm::English);
+
+    let make_splittable = |text: &String| -> String {
+        let with_substitutions = text
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace("—", " ")
+            .replace("'s", "")
+            .to_lowercase();
+        let splittable = re_verse_chars.replace_all(&with_substitutions, "");
+        splittable.to_string() 
+    };
+
+    let indices: (scripture_types::WordsIndex, scripture_types::PathsIndex) = (HashMap::new(), HashMap::new());
+
+    let count_word_usage = |mut words_index: scripture_types::WordsIndex, word: &str, id| {
+        let stemmed = en_stemmer.stem(word);
+
+        words_index.insert(
+            stemmed.to_string(),
+            match words_index.get(&stemmed.to_string()) {
+                Some(x) => {
+                    let mut verses_using_word = x.clone();
+                    verses_using_word.insert(id);
+                    verses_using_word
+                },
+                None => {
+                    let mut verses_using_word = HashSet::new();
+                    verses_using_word.insert(id);
+                    verses_using_word
+                },
+            }
+        );
+        words_index
+    };
+
+    let count_verse = |verse_text: &String, words_index: scripture_types::WordsIndex, id| {
+        let index_with_verse_added = make_splittable(verse_text)
+            .split_whitespace()
+            .fold(
+                words_index,
+                |acc, word| count_word_usage(acc, word, id) 
+            );
+        index_with_verse_added
+    };
+
+    // Old Testament
+    let indices = prepare_book_paths(HasBooks::OT(&ot)).iter()
+        .fold(
+            indices,
+            |(words_index, mut path_index), (title, chapter_num, verse)| {
+                scripture_id += 1;
+                path_index.insert(scripture_id, scripture_types::VersePath::PathOT(title.to_string(), *chapter_num, verse.verse as u8));
+                (count_verse(&verse.text, words_index, scripture_id), path_index)
+            }
+        );
+
+    // New Testament
+    let indices = prepare_book_paths(HasBooks::NT(&nt)).iter()
+        .fold(
+            indices,
+            |(words_index, mut path_index), (title, chapter_num, verse)| {
+                scripture_id += 1;
+                path_index.insert(scripture_id, scripture_types::VersePath::PathNT(title.to_string(), *chapter_num, verse.verse as u8));
+                (count_verse(&verse.text, words_index, scripture_id), path_index)
+            }
+        );
+
+    // Book of Mormon
+    let indices = prepare_book_paths(HasBooks::BOM(&bom)).iter()
+        .fold(
+            indices,
+            |(words_index, mut path_index), (title, chapter_num, verse)| {
+                scripture_id += 1;
+                path_index.insert(scripture_id, scripture_types::VersePath::PathBoM(title.to_string(), *chapter_num, verse.verse as u8));
+                (count_verse(&verse.text, words_index, scripture_id), path_index)
+            }
+        );
+
+    // Doctrine and Covenants
+    println!("    {}", &dc.title);
+    let with_section_nums: Vec<(u8, &scripture_types::Verse)> = (&dc).sections.iter()
+        .flat_map(|section| {
+            let with_section_nums: Vec<(u8, &scripture_types::Verse)> = section.verses.iter().map(|v| (section.section as u8, v)).collect();
+
+            with_section_nums
+        })
+        .collect();
+
+    let indices = with_section_nums.iter()
+        .fold(
+            indices,
+            |(words_index, mut path_index), (section_num, verse)| {
+                scripture_id += 1;
+                path_index.insert(scripture_id, scripture_types::VersePath::PathDC(*section_num, verse.verse as u8));
+                (count_verse(&verse.text, words_index, scripture_id), path_index)
+            }
+        );
+
+    // Pearl of Great Price
+    let indices = prepare_book_paths(HasBooks::POGP(&pogp)).iter()
+        .fold(
+            indices,
+            |(words_index, mut path_index), (title, chapter_num, verse)| {
+                scripture_id += 1;
+                path_index.insert(scripture_id, scripture_types::VersePath::PathPOGP(title.to_string(), *chapter_num, verse.verse as u8));
+                (count_verse(&verse.text, words_index, scripture_id), path_index)
+            }
+        );
+
+    indices
+}
+
+// enum AndOr {
+//     And = 1,
+//     Or = 0,
+// }
 
 fn ensure_data_source(test_path: &std::path::PathBuf) {
     if Path::new(&test_path).exists() {
@@ -45,7 +213,7 @@ pub fn copy_minified<T: serde::de::DeserializeOwned + serde::ser::Serialize>(
     src_folder: &std::path::PathBuf,
     dest_folder: &std::path::PathBuf,
     file_name: &str,
-) -> () {
+) -> T {
     println!("    {}", file_name);
     let mut src = src_folder.clone();
     src.push(file_name); 
@@ -58,6 +226,26 @@ pub fn copy_minified<T: serde::de::DeserializeOwned + serde::ser::Serialize>(
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
     serde_json::to_writer(&mut encoder, &parsed).unwrap();
+
+    let mut f_gzipped = BufWriter::new(File::create(dest).unwrap());
+    let gzipped = encoder.finish().unwrap();
+    f_gzipped.write(&gzipped).unwrap();
+
+    parsed
+}
+
+pub fn write_minified<T: serde::ser::Serialize>(
+    data: &T,
+    dest_folder: &std::path::PathBuf,
+    file_name: &str,
+) -> () {
+    let mut dest = dest_folder.clone();
+    dest.push(format!("{}.{}", file_name, "gz"));
+    
+    println!("writing {}", file_name);
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+    serde_json::to_writer(&mut encoder, data).unwrap();
 
     let mut f_gzipped = BufWriter::new(File::create(dest).unwrap());
     let gzipped = encoder.finish().unwrap();
@@ -84,40 +272,48 @@ fn main() {
     dest_folder.push("data");
 
     // TODO: is there a way to have a list of concrete values and types,
-    // and interate on each of them?
+    // and iterate on each of them?
     // AFAIK, you can't mix term and type levels like that in Haskell.
     // let sources = vec![
     //     ("old-testament.json", scripture_types::OldTestament),
     // ];
     println!("Minifying:");
-    copy_minified::<scripture_types::OldTestament>(
+    let ot = copy_minified::<scripture_types::OldTestament>(
         &src_folder,
         &dest_folder,
         "old-testament.json",
     );
 
-    copy_minified::<scripture_types::NewTestament>(
+    let nt = copy_minified::<scripture_types::NewTestament>(
         &src_folder,
         &dest_folder,
         "new-testament.json",
     );
 
-    copy_minified::<scripture_types::BookOfMormon>(
+    let bom = copy_minified::<scripture_types::BookOfMormon>(
         &src_folder,
         &dest_folder,
         "book-of-mormon.json",
     );
 
-    copy_minified::<scripture_types::DoctrineAndCovenants>(
+    let dc = copy_minified::<scripture_types::DoctrineAndCovenants>(
         &src_folder,
         &dest_folder,
         "doctrine-and-covenants.json",
     );
 
-    copy_minified::<scripture_types::PearlOfGreatPrice>(
+    let pogp = copy_minified::<scripture_types::PearlOfGreatPrice>(
         &src_folder,
         &dest_folder,
         "pearl-of-great-price.json",
     );
-    println!("done!\n");
+    println!("Minifying done!\n");
+
+    println!("Building indices:");
+    let (words_index, paths_index) = build_index(ot, nt, bom, dc, pogp);
+    println!("Index building done!\n");
+    println!("total word stems: {}", words_index.len());
+    println!("total paths: {}", paths_index.len());
+    write_minified(&words_index, &dest_folder, "words-index.json");
+    write_minified(&paths_index, &dest_folder, "paths-index.json");
 }

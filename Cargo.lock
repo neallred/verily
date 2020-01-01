@@ -242,6 +242,8 @@ name = "data-bundler"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "regex",
+ "rust-stemmers",
  "scripture-types",
  "serde",
  "serde_derive",
