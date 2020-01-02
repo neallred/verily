@@ -27,7 +27,7 @@ pub enum HasBooks<'a> {
     POGP(&'a scripture_types::PearlOfGreatPrice),
 }
 
-fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(&'a String, u8, &'a scripture_types::Verse)> {
+fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(usize, usize, &'a scripture_types::Verse)> {
     let (books, title) = match coll {
         HasBooks::OT(x) => (&x.books, &x.title),
         HasBooks::NT(x) => (&x.books, &x.title),
@@ -35,17 +35,17 @@ fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(&'a String, u8, &'a script
         HasBooks::POGP(x) => (&x.books, &x.title),
     };
     println!("    {}", title);
-    let with_books: Vec<(&String, &scripture_types::Chapter)> = books.iter()
-        .flat_map(|book| {
-            let with_books: Vec<(&String, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (&book.book, cs)).collect();
+    let with_books: Vec<(usize, &scripture_types::Chapter)> = books.iter().enumerate()
+        .flat_map(|(book_num, book)| {
+            let with_books: Vec<(usize, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (book_num, cs)).collect();
 
             with_books
         })
         .collect();
 
     let with_chapters = with_books.iter()
-        .flat_map(|(title, chapter)| {
-            let with_verses: Vec<(&String, u8, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*title, chapter.chapter as u8, v)).collect();
+        .flat_map(|(book_num, chapter)| {
+            let with_verses: Vec<(usize, usize, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*book_num, chapter.chapter as usize - 1, v)).collect();
 
             with_verses
         })
@@ -115,9 +115,9 @@ fn build_index(
     let indices = prepare_book_paths(HasBooks::OT(&ot)).iter()
         .fold(
             indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
+            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
                 scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathOT(title.to_string(), *chapter_num, verse.verse as u8));
+                path_index.insert(scripture_id, scripture_types::VersePath::PathOT(*book_num, *chapter_num, verse.verse as usize - 1));
                 (count_verse(&verse.text, words_index, scripture_id), path_index)
             }
         );
@@ -126,9 +126,9 @@ fn build_index(
     let indices = prepare_book_paths(HasBooks::NT(&nt)).iter()
         .fold(
             indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
+            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
                 scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathNT(title.to_string(), *chapter_num, verse.verse as u8));
+                path_index.insert(scripture_id, scripture_types::VersePath::PathNT(*book_num, *chapter_num, verse.verse as usize - 1));
                 (count_verse(&verse.text, words_index, scripture_id), path_index)
             }
         );
@@ -137,18 +137,18 @@ fn build_index(
     let indices = prepare_book_paths(HasBooks::BOM(&bom)).iter()
         .fold(
             indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
+            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
                 scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathBoM(title.to_string(), *chapter_num, verse.verse as u8));
+                path_index.insert(scripture_id, scripture_types::VersePath::PathBoM(*book_num, *chapter_num, verse.verse as usize - 1));
                 (count_verse(&verse.text, words_index, scripture_id), path_index)
             }
         );
 
     // Doctrine and Covenants
     println!("    {}", &dc.title);
-    let with_section_nums: Vec<(u8, &scripture_types::Verse)> = (&dc).sections.iter()
+    let with_section_nums: Vec<(usize, &scripture_types::Verse)> = (&dc).sections.iter()
         .flat_map(|section| {
-            let with_section_nums: Vec<(u8, &scripture_types::Verse)> = section.verses.iter().map(|v| (section.section as u8, v)).collect();
+            let with_section_nums: Vec<(usize, &scripture_types::Verse)> = section.verses.iter().map(|v| (section.section as usize - 1, v)).collect();
 
             with_section_nums
         })
@@ -159,7 +159,7 @@ fn build_index(
             indices,
             |(words_index, mut path_index), (section_num, verse)| {
                 scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathDC(*section_num, verse.verse as u8));
+                path_index.insert(scripture_id, scripture_types::VersePath::PathDC(*section_num, verse.verse as usize - 1));
                 (count_verse(&verse.text, words_index, scripture_id), path_index)
             }
         );
@@ -168,9 +168,9 @@ fn build_index(
     let indices = prepare_book_paths(HasBooks::POGP(&pogp)).iter()
         .fold(
             indices,
-            |(words_index, mut path_index), (title, chapter_num, verse)| {
+            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
                 scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathPOGP(title.to_string(), *chapter_num, verse.verse as u8));
+                path_index.insert(scripture_id, scripture_types::VersePath::PathPOGP(*book_num, *chapter_num, verse.verse as usize));
                 (count_verse(&verse.text, words_index, scripture_id), path_index)
             }
         );

@@ -18,6 +18,16 @@ use std::io::prelude::*;
 use std::collections::HashSet;
 // use std::collections::HashMap;
 // use std::error::Error;
+use scripture_types::{
+    BookOfMormon,
+    DoctrineAndCovenants,
+    NewTestament,
+    OldTestament,
+    PathsIndex,
+    PearlOfGreatPrice,
+    VersePath,
+    WordsIndex,
+};
 
 extern crate web_sys;
 use web_sys::console;
@@ -77,13 +87,13 @@ static BYTES_PATHS_INDEX: &'static [u8] = include_bytes!("../../data-bundler/dat
 
 // TODO: Figure out to do this one, at compile time.
 lazy_static! {
-    static ref BOOK_OF_MORMON: scripture_types::BookOfMormon = parse_gzip(&BYTES_BOOK_OF_MORMON);
-    static ref OLD_TESTAMENT: scripture_types::OldTestament = parse_gzip(&BYTES_OLD_TESTAMENT);
-    static ref NEW_TESTAMENT: scripture_types::NewTestament = parse_gzip(&BYTES_NEW_TESTAMENT);
-    static ref PEARL_OF_GREAT_PRICE: scripture_types::PearlOfGreatPrice = parse_gzip(&BYTES_PEARL_OF_GREAT_PRICE);
-    static ref DOCTRINE_AND_COVENANTS: scripture_types::DoctrineAndCovenants = parse_gzip(&BYTES_DOCTRINE_AND_COVENANTS);
-    static ref WORDS_INDEX: scripture_types::WordsIndex = parse_gzip(&BYTES_WORDS_INDEX);
-    static ref PATHS_INDEX: scripture_types::PathsIndex = parse_gzip(&BYTES_PATHS_INDEX);
+    static ref BOOK_OF_MORMON: BookOfMormon = parse_gzip(&BYTES_BOOK_OF_MORMON);
+    static ref OLD_TESTAMENT: OldTestament = parse_gzip(&BYTES_OLD_TESTAMENT);
+    static ref NEW_TESTAMENT: NewTestament = parse_gzip(&BYTES_NEW_TESTAMENT);
+    static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = parse_gzip(&BYTES_PEARL_OF_GREAT_PRICE);
+    static ref DOCTRINE_AND_COVENANTS: DoctrineAndCovenants = parse_gzip(&BYTES_DOCTRINE_AND_COVENANTS);
+    static ref WORDS_INDEX: WordsIndex = parse_gzip(&BYTES_WORDS_INDEX);
+    static ref PATHS_INDEX: PathsIndex = parse_gzip(&BYTES_PATHS_INDEX);
     static ref STEMMER: rust_stemmers::Stemmer = Stemmer::create(Algorithm::English);
     static ref RE_VERSE_CHARS: Regex = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
 }
@@ -132,7 +142,7 @@ pub fn bootstrap_searcher() {
         },
     };
     full_match_search(
-        String::from("BOOSTRAP SEARCHER BOOSTRAP SEARCHER BOOSTRAP SEARCHER"),
+        String::from("BOOSTRAP SCRIPTURED SEARCHER"),
         JsValue::from_serde(&empty_preferences).unwrap(),
     );
     log!("words: {:?}", WORDS_INDEX.len());
@@ -150,6 +160,17 @@ fn make_splittable(text: &String) -> String {
     splittable.to_string() 
 }
 
+pub fn resolve_verse_path(path: &VersePath, _preferences: &SearchPreferences) -> &'static scripture_types::Verse {
+    log!("resolving: {:?}", path);
+    match path {
+        VersePath::PathOT(b, c, v) => &(&*OLD_TESTAMENT).books[*b].chapters[*c].verses[*v],
+        VersePath::PathNT(b, c, v) => &(&*NEW_TESTAMENT).books[*b].chapters[*c].verses[*v],
+        VersePath::PathBoM(b, c, v) => &(&*BOOK_OF_MORMON).books[*b].chapters[*c].verses[*v],
+        VersePath::PathDC(s, v) => &(&*DOCTRINE_AND_COVENANTS).sections[*s].verses[*v],
+        VersePath::PathPOGP(b, c, v) => &(&*PEARL_OF_GREAT_PRICE).books[*b].chapters[*c].verses[*v],
+    }
+}
+
 #[wasm_bindgen]
 pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue) -> JsValue {
     let search_preferences: SearchPreferences = search_preferences_js.into_serde().unwrap();
@@ -164,25 +185,37 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     };
 
     let mut results: Vec<String> = vec![];
-    let empty = HashSet::new();
-    let empty_forever = HashSet::new();
+    // let mut empty = HashSet::new();
+    // let empty_forever = HashSet::new();
 
+
+    let all_verses: HashSet<u32> = (1..(&*PATHS_INDEX).len() as u32).collect();
+    // let no_verses: HashSet<u32> = HashSet::new();
     let stemmed_search = STEMMER.stem(search_term);
 
-    let bob = || {
-        let result = make_splittable(search_term).split_whitespace().fold(
-            empty,
-            |mut acc, word| {
-                let index_results = match (&*WORDS_INDEX).get(word) {
-                    Some(x) => x,
-                    None => &empty_forever,
-                };
-                index_results
-            }
-        );
-        result
-    };
-    let index_results = bob();
+    let index_results = make_splittable(&stemmed_search.to_string()).split_whitespace().fold(
+        all_verses,
+        |acc, word| {
+            log!("searching for word {:?}", word);
+            let index_results = match (&*WORDS_INDEX).get(word) {
+                Some(x) => {
+                    log!("found word {:?}: {:?}", word, x);
+                    let in_both = acc.intersection(x).map(|&x| x).collect();
+                    in_both
+                },
+                None => {
+                    log!("no match for {:?}", word);
+                    HashSet::new()
+                },
+            };
+            index_results
+    });
+    log!("verse numbers matched {:?}", index_results);
+    let verses: Vec<&String> = index_results.iter()
+        .map(|x| (&*PATHS_INDEX).get(x).unwrap())
+        .map(|x| &resolve_verse_path(x, &search_preferences).text)
+        .collect();
+    log!("verses matched {:?}", verses);
 
     if search_preferences.included_sources.ot {
         let mut ot_results: Vec<String> = (&*OLD_TESTAMENT).books.iter()

@@ -9,13 +9,13 @@ use std::collections::HashMap;
 pub type WordsIndex = HashMap<String, HashSet<u32>>;
 pub type PathsIndex = HashMap<u32, VersePath>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum VersePath {
-    PathBoM(String, u8, u8),
-    PathOT(String, u8, u8),
-    PathNT(String, u8, u8),
-    PathPOGP(String, u8, u8),
-    PathDC(u8, u8), // section verse
+    PathBoM(usize, usize, usize),
+    PathOT(usize, usize, usize),
+    PathNT(usize, usize, usize),
+    PathPOGP(usize, usize, usize),
+    PathDC(usize, usize), // section verse
 }
 
 #[derive(Serialize, Deserialize)]
