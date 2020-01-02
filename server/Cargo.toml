@@ -12,3 +12,7 @@ build = "build.rs"
 
 [dependencies]
 rouille = "3.0.0"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
