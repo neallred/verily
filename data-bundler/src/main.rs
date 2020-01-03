@@ -1,18 +1,18 @@
-extern crate scripture_types;
 extern crate rust_stemmers;
+extern crate scripture_types;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::path::Path;
 
-use std::io::prelude::*;
-use flate2::Compression;
 use flate2::write::GzEncoder;
-use std::collections::HashSet;
-use std::collections::HashMap;
-use rust_stemmers::{Algorithm, Stemmer};
+use flate2::Compression;
 use regex::Regex;
+use rust_stemmers::{Algorithm, Stemmer};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::io::prelude::*;
 
 #[cfg(windows)]
 pub const NPM: &'static str = "npm.cmd";
@@ -35,22 +35,29 @@ fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(usize, usize, &'a scriptur
         HasBooks::POGP(x) => (&x.books, &x.title),
     };
     println!("    {}", title);
-    let with_books: Vec<(usize, &scripture_types::Chapter)> = books.iter().enumerate()
+    let with_books: Vec<(usize, &scripture_types::Chapter)> = books
+        .iter()
+        .enumerate()
         .flat_map(|(book_num, book)| {
-            let with_books: Vec<(usize, &scripture_types::Chapter)> = book.chapters.iter().map(|cs| (book_num, cs)).collect();
+            let with_books: Vec<(usize, &scripture_types::Chapter)> =
+                book.chapters.iter().map(|cs| (book_num, cs)).collect();
 
             with_books
         })
         .collect();
 
-    let with_chapters = with_books.iter()
+    let with_chapters = with_books
+        .iter()
         .flat_map(|(book_num, chapter)| {
-            let with_verses: Vec<(usize, usize, &scripture_types::Verse)> = chapter.verses.iter().map(|v| (*book_num, chapter.chapter as usize - 1, v)).collect();
+            let with_verses: Vec<(usize, usize, &scripture_types::Verse)> = chapter
+                .verses
+                .iter()
+                .map(|v| (*book_num, chapter.chapter as usize - 1, v))
+                .collect();
 
             with_verses
         })
         .collect();
-
 
     with_chapters
 }
@@ -75,10 +82,11 @@ fn build_index(
             .replace("'s", "")
             .to_lowercase();
         let splittable = re_verse_chars.replace_all(&with_substitutions, "");
-        splittable.to_string() 
+        splittable.to_string()
     };
 
-    let indices: (scripture_types::WordsIndex, scripture_types::PathsIndex) = (HashMap::new(), HashMap::new());
+    let indices: (scripture_types::WordsIndex, scripture_types::PathsIndex) =
+        (HashMap::new(), HashMap::new());
 
     let count_word_usage = |mut words_index: scripture_types::WordsIndex, word: &str, id| {
         let stemmed = en_stemmer.stem(word);
@@ -90,13 +98,13 @@ fn build_index(
                     let mut verses_using_word = x.clone();
                     verses_using_word.insert(id);
                     verses_using_word
-                },
+                }
                 None => {
                     let mut verses_using_word = HashSet::new();
                     verses_using_word.insert(id);
                     verses_using_word
-                },
-            }
+                }
+            },
         );
         words_index
     };
@@ -104,76 +112,116 @@ fn build_index(
     let count_verse = |verse_text: &String, words_index: scripture_types::WordsIndex, id| {
         let index_with_verse_added = make_splittable(verse_text)
             .split_whitespace()
-            .fold(
-                words_index,
-                |acc, word| count_word_usage(acc, word, id) 
-            );
+            .fold(words_index, |acc, word| count_word_usage(acc, word, id));
         index_with_verse_added
     };
 
     // Old Testament
-    let indices = prepare_book_paths(HasBooks::OT(&ot)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathOT(*book_num, *chapter_num, verse.verse as usize - 1));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
+    let indices = prepare_book_paths(HasBooks::OT(&ot)).iter().fold(
+        indices,
+        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+            scripture_id += 1;
+            path_index.insert(
+                scripture_id,
+                scripture_types::VersePath::PathOT(
+                    *book_num,
+                    *chapter_num,
+                    verse.verse as usize - 1,
+                ),
+            );
+            (
+                count_verse(&verse.text, words_index, scripture_id),
+                path_index,
+            )
+        },
+    );
 
     // New Testament
-    let indices = prepare_book_paths(HasBooks::NT(&nt)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathNT(*book_num, *chapter_num, verse.verse as usize - 1));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
+    let indices = prepare_book_paths(HasBooks::NT(&nt)).iter().fold(
+        indices,
+        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+            scripture_id += 1;
+            path_index.insert(
+                scripture_id,
+                scripture_types::VersePath::PathNT(
+                    *book_num,
+                    *chapter_num,
+                    verse.verse as usize - 1,
+                ),
+            );
+            (
+                count_verse(&verse.text, words_index, scripture_id),
+                path_index,
+            )
+        },
+    );
 
     // Book of Mormon
-    let indices = prepare_book_paths(HasBooks::BOM(&bom)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathBoM(*book_num, *chapter_num, verse.verse as usize - 1));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
+    let indices = prepare_book_paths(HasBooks::BOM(&bom)).iter().fold(
+        indices,
+        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+            scripture_id += 1;
+            path_index.insert(
+                scripture_id,
+                scripture_types::VersePath::PathBoM(
+                    *book_num,
+                    *chapter_num,
+                    verse.verse as usize - 1,
+                ),
+            );
+            (
+                count_verse(&verse.text, words_index, scripture_id),
+                path_index,
+            )
+        },
+    );
 
     // Doctrine and Covenants
     println!("    {}", &dc.title);
-    let with_section_nums: Vec<(usize, &scripture_types::Verse)> = (&dc).sections.iter()
+    let with_section_nums: Vec<(usize, &scripture_types::Verse)> = (&dc)
+        .sections
+        .iter()
         .flat_map(|section| {
-            let with_section_nums: Vec<(usize, &scripture_types::Verse)> = section.verses.iter().map(|v| (section.section as usize - 1, v)).collect();
+            let with_section_nums: Vec<(usize, &scripture_types::Verse)> = section
+                .verses
+                .iter()
+                .map(|v| (section.section as usize - 1, v))
+                .collect();
 
             with_section_nums
         })
         .collect();
 
-    let indices = with_section_nums.iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (section_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathDC(*section_num, verse.verse as usize - 1));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
+    let indices = with_section_nums.iter().fold(
+        indices,
+        |(words_index, mut path_index), (section_num, verse)| {
+            scripture_id += 1;
+            path_index.insert(
+                scripture_id,
+                scripture_types::VersePath::PathDC(*section_num, verse.verse as usize - 1),
+            );
+            (
+                count_verse(&verse.text, words_index, scripture_id),
+                path_index,
+            )
+        },
+    );
 
     // Pearl of Great Price
-    let indices = prepare_book_paths(HasBooks::POGP(&pogp)).iter()
-        .fold(
-            indices,
-            |(words_index, mut path_index), (book_num, chapter_num, verse)| {
-                scripture_id += 1;
-                path_index.insert(scripture_id, scripture_types::VersePath::PathPOGP(*book_num, *chapter_num, verse.verse as usize));
-                (count_verse(&verse.text, words_index, scripture_id), path_index)
-            }
-        );
+    let indices = prepare_book_paths(HasBooks::POGP(&pogp)).iter().fold(
+        indices,
+        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+            scripture_id += 1;
+            path_index.insert(
+                scripture_id,
+                scripture_types::VersePath::PathPOGP(*book_num, *chapter_num, verse.verse as usize),
+            );
+            (
+                count_verse(&verse.text, words_index, scripture_id),
+                path_index,
+            )
+        },
+    );
 
     indices
 }
@@ -197,13 +245,12 @@ fn ensure_data_source(test_path: &std::path::PathBuf) {
 }
 
 pub fn read_file(filepath: &str) -> String {
-    let file = File::open(filepath)
-        .expect("could not open file");
+    let file = File::open(filepath).expect("could not open file");
     let mut buffered_reader = BufReader::new(file);
     let mut contents = String::new();
     let _number_of_bytes: usize = match buffered_reader.read_to_string(&mut contents) {
         Ok(number_of_bytes) => number_of_bytes,
-        Err(_err) => 0
+        Err(_err) => 0,
     };
 
     contents
@@ -216,7 +263,7 @@ pub fn copy_minified<T: serde::de::DeserializeOwned + serde::ser::Serialize>(
 ) -> T {
     println!("    {}", file_name);
     let mut src = src_folder.clone();
-    src.push(file_name); 
+    src.push(file_name);
 
     let unparsed: String = read_file(&src.into_os_string().into_string().unwrap());
     let parsed: T = serde_json::from_str(&unparsed).unwrap();
@@ -241,7 +288,7 @@ pub fn write_minified<T: serde::ser::Serialize>(
 ) -> () {
     let mut dest = dest_folder.clone();
     dest.push(format!("{}.{}", file_name, "gz"));
-    
+
     println!("writing {}", file_name);
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
@@ -264,7 +311,7 @@ fn main() {
     src_folder.push("scriptures-json");
 
     let mut test_path = src_folder.clone();
-    test_path.push("old-testament.json"); 
+    test_path.push("old-testament.json");
     ensure_data_source(&test_path);
 
     let mut dest_folder = project_root.clone();

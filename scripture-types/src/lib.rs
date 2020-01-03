@@ -3,8 +3,8 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub type WordsIndex = HashMap<String, HashSet<u32>>;
 pub type PathsIndex = HashMap<u32, VersePath>;
