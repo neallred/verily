@@ -18,7 +18,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir = "../server/src";
     let dest_path = Path::new(&out_dir).join("main.rs");
     {
-        std::fs::remove_file(&dest_path)?;
+        match std::fs::remove_file(&dest_path) {
+            Ok(_) => {
+                println!("removed existing main.rs server file");
+            }
+            Err(_err) => {
+                println!("no main.rs server file to remove");
+            }
+        };
     }
 
     let mut main_rs = File::create(&dest_path)?;
@@ -42,9 +49,9 @@ fn main() {
 }
 "##;
 
-    writeln!(&mut main_rs, "{}", header)?;
+    writeln!(&mut main_rs, "{}", header).expect("Expected to be able to write to main.rs");
 
-    for f in fs::read_dir(SOURCE_DIR)? {
+    for f in fs::read_dir(SOURCE_DIR).expect("expected to find client files for bundling") {
         let f = f?;
  
         if !f.file_type()?.is_file() {
