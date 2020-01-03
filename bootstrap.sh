@@ -10,6 +10,6 @@ fi
 wasm-pack build --release client/
 pushd client/web/
 npm i
-npm run build
+NODE_ENV=production npm run build
 popd
 cargo build --release --bin server
