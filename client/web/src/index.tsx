@@ -99,7 +99,7 @@ function App({}: AppProps) {
     bootstrapTimeoutRef.current = timeoutMethod(
       () => {
         try {
-          wasm.bootstrap_searcher()
+          wasm.bootstrap_searcher();
           setBootstrapped(Bootstrapped.Y);
         } catch(e) {
           alert(e);

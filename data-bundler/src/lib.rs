@@ -223,5 +223,3 @@ pub fn build_index(
 
     indices
 }
-
-

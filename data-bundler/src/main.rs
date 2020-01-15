@@ -8,6 +8,7 @@ use std::path::Path;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::io::prelude::*;
+use data_bundler;
 
 #[cfg(windows)]
 pub const NPM: &'static str = "npm.cmd";
@@ -107,34 +108,42 @@ fn main() {
     dest_folder.push("data");
 
     println!("Minifying:");
-    copy_minified::<scripture_types::OldTestament>(
+    let ot = copy_minified::<scripture_types::OldTestament>(
         &src_folder,
         &dest_folder,
         "old-testament.json",
     );
 
-    copy_minified::<scripture_types::NewTestament>(
+    let nt = copy_minified::<scripture_types::NewTestament>(
         &src_folder,
         &dest_folder,
         "new-testament.json",
     );
 
-    copy_minified::<scripture_types::BookOfMormon>(
+    let bom = copy_minified::<scripture_types::BookOfMormon>(
         &src_folder,
         &dest_folder,
         "book-of-mormon.json",
     );
 
-    copy_minified::<scripture_types::DoctrineAndCovenants>(
+    let dc = copy_minified::<scripture_types::DoctrineAndCovenants>(
         &src_folder,
         &dest_folder,
         "doctrine-and-covenants.json",
     );
 
-    copy_minified::<scripture_types::PearlOfGreatPrice>(
+    let pogp = copy_minified::<scripture_types::PearlOfGreatPrice>(
         &src_folder,
         &dest_folder,
         "pearl-of-great-price.json",
     );
     println!("Minifying done!\n");
+
+    println!("Building indices:");
+    let (words_index, paths_index) = data_bundler::build_index(&ot, &nt, &bom, &dc, &pogp);
+    println!("Index building done!\n");
+    println!("total word stems: {}", words_index.len());
+    println!("total paths: {}", paths_index.len());
+    write_minified(&paths_index, &dest_folder, "paths-index.json");
+    write_minified(&words_index, &dest_folder, "words-index.json");
 }
