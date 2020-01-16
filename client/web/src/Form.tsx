@@ -35,7 +35,8 @@ export default function Form({
       display: 'flex',
       alignItems: 'center',
       margin: '0 auto 20px',
-      width: '320px',
+      maxWidth: '520px',
+      position: 'relative'
     }}>
       <input
         placeholder="Search scriptures"
@@ -43,15 +44,27 @@ export default function Form({
         onChange={e => setSearchTerm(e.target.value)}
         ref={inputRef}
         style={{
-          flex: '1 1 auto',
+          flex: '1 1 200px',
           maxWidth: 'calc(100% - 47px)',
         }}
       />
       <GearSvg
         size={30}
         onClick={showPreferences}
-        style={{ marginLeft: '5px', padding: '2px' }}
+        style={{
+          marginLeft: '5px',
+          padding: '2px',
+          flex: '0 0 auto',
+        }}
       />
+      { typeof resultCount === 'number' && <span style={{
+        position: 'absolute',
+        left: '100%',
+        whiteSpace: 'nowrap',
+        alignSelf: 'center',
+      }}>
+        {resultCount} results
+      </span>}
     </div>
     {preferencesOpen &&
       <Preferences
@@ -60,6 +73,5 @@ export default function Form({
         hidePreferences={hidePreferences}
       />
     }
-    { typeof resultCount === 'number' && <span>{resultCount} results</span> }
   </div>
 }

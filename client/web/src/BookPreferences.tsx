@@ -71,6 +71,9 @@ export default function BookPreferences({
     () => getSelectedCount(includeSource, allIncluded, booksIncluded, currentMin, currentMax),
     [includeSource, allIncluded, booksIncluded, currentMin, currentMax],
   );
+
+  const pivot = Math.floor((currentMax + currentMin) / 2);
+
   return <div style={{
       paddingTop: '20px',
     }}>
@@ -94,7 +97,8 @@ export default function BookPreferences({
           textDecoration: 'none',
           fontSize: '18px',
           width: '50px',
-          padding: '1px 2px'
+          padding: '1px 2px',
+          backgroundColor: includeSource ? 'white' : '#cefcce',
         }}
       >{includeSource ? 'Hide' : 'Use'}</button>
     </div>
@@ -130,22 +134,33 @@ export default function BookPreferences({
       }
       { numberRange
           ?
-            <div>
+            <div className="range-container"
+              style={{
+                marginTop: '8px',
+              }}
+            >
+
               <input
                 type="range"
                 id={`${bookronym}-min`}
                 min={min}
-                max={max}
+                max={Math.min(max, Math.max(pivot, currentMin + 1))}
                 step={1}
+                style={{
+                  flexGrow: Math.max(1, pivot - min), 
+                }}
                 value={currentMin}
                 onChange={setSlider}
               />
               <input
                 type="range"
                 id={`${bookronym}-max`}
-                min={min}
+                min={Math.max(min, Math.min(pivot, currentMax - 1))}
                 max={max}
                 step={1}
+                style={{
+                  flexGrow: Math.max(1, max - pivot), 
+                }}
                 value={currentMax}
                 onChange={setSlider}
               />

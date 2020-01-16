@@ -445,12 +445,12 @@ export default function Preferences({
         fontSize: '18px',
       }}
     >
-      <div>
+      {/* <div>
         And search: <input type="checkbox" checked={preferences.and} onChange={e => setPreferences({...preferences, and: e.target.checked})} />
       </div>
       <div>
         Case sensitive search: <input type="checkbox" checked={preferences.caseSensitive} onChange={e => setPreferences({...preferences, caseSensitive: e.target.checked})} />
-      </div>
+      </div>*/}
       <BookPreferences
         bookronym="ot"
         title="Old Testament"
