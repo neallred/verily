@@ -5,9 +5,6 @@ use std::io::BufWriter;
 use std::io::Read;
 use std::path::Path;
 
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::io::prelude::*;
 use data_bundler;
 
 #[cfg(windows)]
@@ -58,14 +55,10 @@ pub fn copy_minified<T: serde::de::DeserializeOwned + serde::ser::Serialize>(
     let parsed: T = serde_json::from_str(&unparsed).unwrap();
 
     let mut dest = dest_folder.clone();
-    dest.push(format!("{}.{}", file_name, "gz"));
+    dest.push(format!("{}", file_name));
 
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-    serde_json::to_writer(&mut encoder, &parsed).unwrap();
-
-    let mut f_gzipped = BufWriter::new(File::create(dest).unwrap());
-    let gzipped = encoder.finish().unwrap();
-    f_gzipped.write(&gzipped).unwrap();
+    let mut f = BufWriter::new(File::create(dest).unwrap());
+    serde_json::to_writer(&mut f, &parsed).unwrap();
 
     parsed
 }
@@ -76,16 +69,12 @@ pub fn write_minified<T: serde::ser::Serialize>(
     file_name: &str,
 ) -> () {
     let mut dest = dest_folder.clone();
-    dest.push(format!("{}.{}", file_name, "gz"));
+    dest.push(format!("{}", file_name));
 
     println!("writing {}", file_name);
 
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
-    serde_json::to_writer(&mut encoder, data).unwrap();
-
-    let mut f_gzipped = BufWriter::new(File::create(dest).unwrap());
-    let gzipped = encoder.finish().unwrap();
-    f_gzipped.write(&gzipped).unwrap();
+    let mut f = BufWriter::new(File::create(dest).unwrap());
+    serde_json::to_writer(&mut f, &data).unwrap();
 }
 
 fn main() {

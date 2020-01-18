@@ -12,14 +12,12 @@ mod preferences;
 #[macro_use]
 extern crate lazy_static;
 
-use flate2::read::GzDecoder;
 use scripture_types::{
     BookOfMormon, DoctrineAndCovenants, NewTestament, OldTestament, PathsIndex, VersePathsIndex, PearlOfGreatPrice,
     VersePath, WordsIndex,
 };
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::prelude::*;
 use wasm_bindgen::prelude::*;
 
 extern crate web_sys;
@@ -37,36 +35,36 @@ macro_rules! log {
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-static BYTES_OLD_TESTAMENT: &'static [u8] =
-    include_bytes!("../../data-bundler/data/old-testament.json.gz");
-static BYTES_NEW_TESTAMENT: &'static [u8] =
-    include_bytes!("../../data-bundler/data/new-testament.json.gz");
-static BYTES_BOOK_OF_MORMON: &'static [u8] =
-    include_bytes!("../../data-bundler/data/book-of-mormon.json.gz");
-static BYTES_DOCTRINE_AND_COVENANTS: &'static [u8] =
-    include_bytes!("../../data-bundler/data/doctrine-and-covenants.json.gz");
-static BYTES_PEARL_OF_GREAT_PRICE: &'static [u8] =
-    include_bytes!("../../data-bundler/data/pearl-of-great-price.json.gz");
-static BYTES_WORDS_INDEX: &'static [u8] =
-    include_bytes!("../../data-bundler/data/words-index.json.gz");
-static BYTES_PATHS_INDEX: &'static [u8] =
-    include_bytes!("../../data-bundler/data/paths-index.json.gz");
+static STR_OLD_TESTAMENT: &'static str =
+    include_str!("../../data-bundler/data/old-testament.json");
+static STR_NEW_TESTAMENT: &'static str =
+    include_str!("../../data-bundler/data/new-testament.json");
+static STR_BOOK_OF_MORMON: &'static str =
+    include_str!("../../data-bundler/data/book-of-mormon.json");
+static STR_DOCTRINE_AND_COVENANTS: &'static str =
+    include_str!("../../data-bundler/data/doctrine-and-covenants.json");
+static STR_PEARL_OF_GREAT_PRICE: &'static str =
+    include_str!("../../data-bundler/data/pearl-of-great-price.json");
+static STR_WORDS_INDEX: &'static str =
+    include_str!("../../data-bundler/data/words-index.json");
+static STR_PATHS_INDEX: &'static str =
+    include_str!("../../data-bundler/data/paths-index.json");
 
 
 static BASE_URL: &'static str = "https://www.churchofjesuschrist.org/study/scriptures";
 
 // TODO: Figure out to do this one, at compile time.
 lazy_static! {
-    static ref BOOK_OF_MORMON: BookOfMormon = parse_gzip(&BYTES_BOOK_OF_MORMON);
-    static ref OLD_TESTAMENT: OldTestament = parse_gzip(&BYTES_OLD_TESTAMENT);
-    static ref NEW_TESTAMENT: NewTestament = parse_gzip(&BYTES_NEW_TESTAMENT);
+    static ref BOOK_OF_MORMON: BookOfMormon = adserde(STR_BOOK_OF_MORMON);
+    static ref OLD_TESTAMENT: OldTestament = adserde(STR_OLD_TESTAMENT);
+    static ref NEW_TESTAMENT: NewTestament = adserde(STR_NEW_TESTAMENT);
     static ref DOCTRINE_AND_COVENANTS: DoctrineAndCovenants =
-        parse_gzip(&BYTES_DOCTRINE_AND_COVENANTS);
-    static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = parse_gzip(&BYTES_PEARL_OF_GREAT_PRICE);
+        adserde(STR_DOCTRINE_AND_COVENANTS);
+    static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = adserde(STR_PEARL_OF_GREAT_PRICE);
 
 
-    static ref WORDS_INDEX: WordsIndex = parse_gzip(&BYTES_WORDS_INDEX);
-    static ref PATHS_INDEX: PathsIndex = parse_gzip(&BYTES_PATHS_INDEX);
+    static ref WORDS_INDEX: WordsIndex = adserde(STR_WORDS_INDEX);
+    static ref PATHS_INDEX: PathsIndex = adserde(STR_PATHS_INDEX);
     static ref VERSE_PATHS_INDEX: VersePathsIndex = scripture_types::paths_to_verse_paths_index(&*PATHS_INDEX);
 
     static ref STEMMER: rust_stemmers::Stemmer = Stemmer::create(Algorithm::English);
@@ -141,17 +139,30 @@ fn format_verse(
     )
 }
 
-pub fn parse_gzip<T: serde::de::DeserializeOwned + serde::ser::Serialize>(gzipped: &[u8]) -> T {
-    let mut d = GzDecoder::new(gzipped);
-    let mut s = String::new();
-    d.read_to_string(&mut s).unwrap();
+pub fn adserde<T: serde::de::DeserializeOwned + serde::ser::Serialize>(s: &'static str) -> T {
+    let t_0 = web_sys::window().unwrap().performance().unwrap().now();
 
-    let data: T = serde_json::from_str(&s).unwrap();
+    let data: T = serde_json::from_str(s).unwrap();
+    let t_1 = web_sys::window().unwrap().performance().unwrap().now();
+    log!("PARSING STRING: {:?}", t_1 - t_0);
     data
 }
 
 #[wasm_bindgen]
 pub fn bootstrap_searcher() {
+    let t_0 = web_sys::window().unwrap().performance().unwrap().now();
+    let num_verse_paths = 
+        (&*VERSE_PATHS_INDEX).len();
+    let t_1 = web_sys::window().unwrap().performance().unwrap().now();
+    log!("CALCULATING VERSE PATHS : {:?}", t_1 - t_0);
+
+    log!(
+        "words: {:?}, paths: {:?}, verse_paths: {:?}",
+        (&*WORDS_INDEX).len(),
+        (&*PATHS_INDEX).len(),
+        num_verse_paths,
+    );
+
     // Force the minimal amount of work to initialize all data structures
     // so that user searches are speedy.
     let empty_preferences = preferences::make_empty_preferences();
@@ -160,13 +171,6 @@ pub fn bootstrap_searcher() {
         String::from("god and the faith"),
         JsValue::from_serde(&empty_preferences).unwrap(),
     );
-    log!(
-        "words: {:?}, paths: {:?}, verse_paths: {:?}",
-        (&*WORDS_INDEX).len(),
-        (&*PATHS_INDEX).len(),
-        (&*VERSE_PATHS_INDEX).len()
-    );
-
 }
 
 fn make_splittable(text: &String) -> String {
@@ -233,6 +237,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
         return JsValue::from_serde(&no_results).unwrap();
     }
 
+    log!("accessing paths index");
     let paths_index = &*PATHS_INDEX;
 
     let search_term = &make_splittable(&search_term_raw.to_lowercase());
@@ -253,6 +258,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
 
     let verse_paths_index = &*VERSE_PATHS_INDEX;
 
+    log!("about to use paths index");
     let or_matches: HashSet<u32> = possible_matches
         .iter()
         .flat_map(|(_k, v)| v.keys())

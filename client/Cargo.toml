@@ -53,7 +53,7 @@ opt-level = "s"
 [dependencies.web-sys]
 version = "0.3"
 features = [
- "console",
+ "console", "Performance", "Window"
 ]
 
 [dependencies.wasm-bindgen]
