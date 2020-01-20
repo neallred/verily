@@ -4,6 +4,7 @@ use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Read;
 use std::path::Path;
+use std::io::Write;
 
 use data_bundler;
 
@@ -55,10 +56,11 @@ pub fn copy_minified<T: serde::de::DeserializeOwned + serde::ser::Serialize>(
     let parsed: T = serde_json::from_str(&unparsed).unwrap();
 
     let mut dest = dest_folder.clone();
-    dest.push(format!("{}", file_name));
+    dest.push(format!("{}.bin", file_name));
 
     let mut f = BufWriter::new(File::create(dest).unwrap());
-    serde_json::to_writer(&mut f, &parsed).unwrap();
+    f.write(&bincode::serialize(&parsed).unwrap()).unwrap();
+    f.flush().unwrap();
 
     parsed
 }
@@ -69,12 +71,13 @@ pub fn write_minified<T: serde::ser::Serialize>(
     file_name: &str,
 ) -> () {
     let mut dest = dest_folder.clone();
-    dest.push(format!("{}", file_name));
+    dest.push(format!("{}.bin", file_name));
 
     println!("writing {}", file_name);
 
     let mut f = BufWriter::new(File::create(dest).unwrap());
-    serde_json::to_writer(&mut f, &data).unwrap();
+    f.write(&bincode::serialize(&data).unwrap()).unwrap();
+    f.flush().unwrap();
 }
 
 fn main() {

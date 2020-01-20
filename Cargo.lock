@@ -87,6 +87,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5753e2a71534719bf3f4e57006c3a4f0d2c672a4b676eec84161f763eca87dbf"
+dependencies = [
+ "byteorder",
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -178,6 +188,7 @@ checksum = "498d20a7aaf62625b9bf26e637cf7736417cde1d0c99f1d04d1170229a85cf87"
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "console_error_panic_hook",
  "flate2",
  "lazy_static",
@@ -241,6 +252,7 @@ dependencies = [
 name = "data-bundler"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "flate2",
  "regex",
  "rust-stemmers",

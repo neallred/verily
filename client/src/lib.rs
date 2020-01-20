@@ -35,36 +35,35 @@ macro_rules! log {
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-static STR_OLD_TESTAMENT: &'static str =
-    include_str!("../../data-bundler/data/old-testament.json");
-static STR_NEW_TESTAMENT: &'static str =
-    include_str!("../../data-bundler/data/new-testament.json");
-static STR_BOOK_OF_MORMON: &'static str =
-    include_str!("../../data-bundler/data/book-of-mormon.json");
-static STR_DOCTRINE_AND_COVENANTS: &'static str =
-    include_str!("../../data-bundler/data/doctrine-and-covenants.json");
-static STR_PEARL_OF_GREAT_PRICE: &'static str =
-    include_str!("../../data-bundler/data/pearl-of-great-price.json");
-static STR_WORDS_INDEX: &'static str =
-    include_str!("../../data-bundler/data/words-index.json");
-static STR_PATHS_INDEX: &'static str =
-    include_str!("../../data-bundler/data/paths-index.json");
+static BIN_OLD_TESTAMENT: &'static [u8] =
+    include_bytes!("../../data-bundler/data/old-testament.json.bin");
+static BIN_NEW_TESTAMENT: &'static [u8] =
+    include_bytes!("../../data-bundler/data/new-testament.json.bin");
+static BIN_BOOK_OF_MORMON: &'static [u8] =
+    include_bytes!("../../data-bundler/data/book-of-mormon.json.bin");
+static BIN_DOCTRINE_AND_COVENANTS: &'static [u8] =
+    include_bytes!("../../data-bundler/data/doctrine-and-covenants.json.bin");
+static BIN_PEARL_OF_GREAT_PRICE: &'static [u8] =
+    include_bytes!("../../data-bundler/data/pearl-of-great-price.json.bin");
+static BIN_WORDS_INDEX: &'static [u8] =
+    include_bytes!("../../data-bundler/data/words-index.json.bin");
+static BIN_PATHS_INDEX: &'static [u8] =
+    include_bytes!("../../data-bundler/data/paths-index.json.bin");
 
 
 static BASE_URL: &'static str = "https://www.churchofjesuschrist.org/study/scriptures";
 
-// TODO: Figure out to do this one, at compile time.
 lazy_static! {
-    static ref BOOK_OF_MORMON: BookOfMormon = adserde(STR_BOOK_OF_MORMON);
-    static ref OLD_TESTAMENT: OldTestament = adserde(STR_OLD_TESTAMENT);
-    static ref NEW_TESTAMENT: NewTestament = adserde(STR_NEW_TESTAMENT);
+    static ref BOOK_OF_MORMON: BookOfMormon = adserde(BIN_BOOK_OF_MORMON);
+    static ref OLD_TESTAMENT: OldTestament = adserde(BIN_OLD_TESTAMENT);
+    static ref NEW_TESTAMENT: NewTestament = adserde(BIN_NEW_TESTAMENT);
     static ref DOCTRINE_AND_COVENANTS: DoctrineAndCovenants =
-        adserde(STR_DOCTRINE_AND_COVENANTS);
-    static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = adserde(STR_PEARL_OF_GREAT_PRICE);
+        adserde(BIN_DOCTRINE_AND_COVENANTS);
+    static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = adserde(BIN_PEARL_OF_GREAT_PRICE);
 
 
-    static ref WORDS_INDEX: WordsIndex = adserde(STR_WORDS_INDEX);
-    static ref PATHS_INDEX: PathsIndex = adserde(STR_PATHS_INDEX);
+    static ref WORDS_INDEX: WordsIndex = adserde(BIN_WORDS_INDEX);
+    static ref PATHS_INDEX: PathsIndex = adserde(BIN_PATHS_INDEX);
     static ref VERSE_PATHS_INDEX: VersePathsIndex = scripture_types::paths_to_verse_paths_index(&*PATHS_INDEX);
 
     static ref STEMMER: rust_stemmers::Stemmer = Stemmer::create(Algorithm::English);
@@ -139,10 +138,10 @@ fn format_verse(
     )
 }
 
-pub fn adserde<T: serde::de::DeserializeOwned + serde::ser::Serialize>(s: &'static str) -> T {
+pub fn adserde<T: serde::de::DeserializeOwned + serde::ser::Serialize>(s: &'static [u8]) -> T {
     let t_0 = web_sys::window().unwrap().performance().unwrap().now();
 
-    let data: T = serde_json::from_str(s).unwrap();
+    let data: T = bincode::deserialize(s).unwrap();
     let t_1 = web_sys::window().unwrap().performance().unwrap().now();
     log!("PARSING STRING: {:?}", t_1 - t_0);
     data
