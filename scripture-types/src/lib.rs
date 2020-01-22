@@ -4,17 +4,20 @@ extern crate serde_json;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-// use std::collections::HashSet;
+use fnv::FnvHashMap;
+use fnv::FnvHashSet;
+use std::collections::HashSet;
 
-pub type WordsIndex = HashMap<String, HashMap<u32, Vec<(usize, usize)>>>;
-pub type PathsIndex = HashMap<u32, VersePath>;
-pub type VersePathsIndex = HashMap<VersePath, u32>;
+pub type WordsIndex = FnvHashMap<String, FnvHashMap<u32, FnvHashMap<usize, usize>>>;
+pub type WordsIndexNoHighlights = FnvHashMap<String, FnvHashSet<u32>>;
+pub type PathsIndex = FnvHashMap<u32, VersePath>;
+pub type VersePathsIndex = FnvHashMap<VersePath, u32>;
 
 pub fn paths_to_verse_paths_index(paths: &PathsIndex) -> VersePathsIndex {
     paths
         .iter()
         .fold(
-            HashMap::new(),
+            FnvHashMap::default(),
             |mut acc, (k, v)| {
                 acc.insert(v.clone(), *k);
                 acc

@@ -191,6 +191,7 @@ dependencies = [
  "bincode",
  "console_error_panic_hook",
  "flate2",
+ "fnv",
  "lazy_static",
  "regex",
  "rust-stemmers",
@@ -201,7 +202,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
- "wee_alloc",
 ]
 
 [[package]]
@@ -254,6 +254,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "flate2",
+ "fnv",
  "regex",
  "rust-stemmers",
  "scripture-types",
@@ -329,6 +330,12 @@ dependencies = [
  "libc",
  "miniz_oxide",
 ]
+
+[[package]]
+name = "fnv"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fad85553e09a6f881f739c29f0b00b0f01357c743266d478b68951ce23285f3"
 
 [[package]]
 name = "fuchsia-cprng"
@@ -442,12 +449,6 @@ name = "memchr"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88579771288728879b57485cc7d6b07d648c9f0141eb955f8ab7f9d45394468e"
-
-[[package]]
-name = "memory_units"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 
 [[package]]
 name = "mime"
@@ -883,6 +884,7 @@ checksum = "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
 name = "scripture-types"
 version = "0.1.0"
 dependencies = [
+ "fnv",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1229,18 +1231,6 @@ dependencies = [
  "sourcefile",
  "wasm-bindgen",
  "wasm-bindgen-webidl",
-]
-
-[[package]]
-name = "wee_alloc"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbb3b5a6b2bb17cb6ad44a2e68a43e8d2722c997da10e928665c72ec6c0a0b8e"
-dependencies = [
- "cfg-if",
- "libc",
- "memory_units",
- "winapi",
 ]
 
 [[package]]

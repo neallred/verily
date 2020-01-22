@@ -132,10 +132,11 @@ fn main() {
     println!("Minifying done!\n");
 
     println!("Building indices:");
-    let (words_index, paths_index) = data_bundler::build_index(&ot, &nt, &bom, &dc, &pogp);
+    let (words_index, words_index_no_highlighting, paths_index) = data_bundler::build_index(&ot, &nt, &bom, &dc, &pogp);
     println!("Index building done!\n");
     println!("total word stems: {}", words_index.len());
     println!("total paths: {}", paths_index.len());
     write_minified(&paths_index, &dest_folder, "paths-index.json");
     write_minified(&words_index, &dest_folder, "words-index.json");
+    write_minified(&words_index_no_highlighting, &dest_folder, "words-index-no-highlights.json");
 }

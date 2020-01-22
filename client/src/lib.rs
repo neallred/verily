@@ -14,10 +14,12 @@ extern crate lazy_static;
 
 use scripture_types::{
     BookOfMormon, DoctrineAndCovenants, NewTestament, OldTestament, PathsIndex, VersePathsIndex, PearlOfGreatPrice,
-    VersePath, WordsIndex,
+    VersePath, WordsIndex, WordsIndexNoHighlights,
 };
 use std::collections::HashMap;
 use std::collections::HashSet;
+use fnv::FnvHashMap;
+use fnv::FnvHashSet;
 use wasm_bindgen::prelude::*;
 
 extern crate web_sys;
@@ -47,12 +49,13 @@ static BIN_PEARL_OF_GREAT_PRICE: &'static [u8] =
     include_bytes!("../../data-bundler/data/pearl-of-great-price.json.bin");
 static BIN_WORDS_INDEX: &'static [u8] =
     include_bytes!("../../data-bundler/data/words-index.json.bin");
+static BIN_WORDS_INDEX_NO_HIGHLIGHTS: &'static [u8] =
+    include_bytes!("../../data-bundler/data/words-index-no-highlights.json.bin");
 static BIN_PATHS_INDEX: &'static [u8] =
     include_bytes!("../../data-bundler/data/paths-index.json.bin");
 
 
 static BASE_URL: &'static str = "https://www.churchofjesuschrist.org/study/scriptures";
-
 lazy_static! {
     static ref BOOK_OF_MORMON: BookOfMormon = adserde(BIN_BOOK_OF_MORMON);
     static ref OLD_TESTAMENT: OldTestament = adserde(BIN_OLD_TESTAMENT);
@@ -63,6 +66,7 @@ lazy_static! {
 
 
     static ref WORDS_INDEX: WordsIndex = adserde(BIN_WORDS_INDEX);
+    static ref WORDS_INDEX_NO_HIGHLIGHTS: WordsIndexNoHighlights = adserde(BIN_WORDS_INDEX_NO_HIGHLIGHTS);
     static ref PATHS_INDEX: PathsIndex = adserde(BIN_PATHS_INDEX);
     static ref VERSE_PATHS_INDEX: VersePathsIndex = scripture_types::paths_to_verse_paths_index(&*PATHS_INDEX);
 
@@ -111,14 +115,14 @@ fn make_link(verse_path: &scripture_types::VersePath) -> String {
     format!("{}/{}", BASE_URL, url_slug)
 }
 
-fn highlight_matches(text: &String, highlights: &Vec<(usize, usize)>) -> String {
+fn highlight_matches(text: &String, highlights: &Vec<(&usize, &usize)>) -> String {
     highlights
         .iter()
         .rev()
         .fold(text.to_string(), |mut acc, (from, to)| {
-            let word_to_replace = &acc[*from..*to];
+            let word_to_replace = &acc[**from..**to];
             acc.replace_range(
-                from..to,
+                *from..*to,
                 &format!("<span class=\"match\">{}</span>", word_to_replace),
             );
             acc
@@ -128,13 +132,15 @@ fn highlight_matches(text: &String, highlights: &Vec<(usize, usize)>) -> String 
 fn format_verse(
     p: &scripture_types::VersePath,
     v: &scripture_types::Verse,
-    highlights: &Vec<(usize, usize)>,
+    highlights: &FnvHashMap<usize, usize>,
 ) -> String {
+    let mut highlights_vec: Vec<(&usize, &usize)> = highlights.iter().collect();
+    highlights_vec.sort();
     format!(
         "<li><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"{}\">{}</a>: {}</li>",
         make_link(p),
         &v.reference,
-        highlight_matches(&v.text, highlights),
+        highlight_matches(&v.text, &highlights_vec),
     )
 }
 
@@ -143,7 +149,7 @@ pub fn adserde<T: serde::de::DeserializeOwned + serde::ser::Serialize>(s: &'stat
 
     let data: T = bincode::deserialize(s).unwrap();
     let t_1 = web_sys::window().unwrap().performance().unwrap().now();
-    log!("PARSING STRING: {:?}", t_1 - t_0);
+    log!("DATA LOAD: {:?}", t_1 - t_0);
     data
 }
 
@@ -227,9 +233,15 @@ fn check_collection_searchable(verse_path: &VersePath, preferences: &preferences
     return_value
 }
 
-pub type WordsIndexBorrowing = HashMap<String, &'static HashMap<u32, Vec<(usize, usize)>>>;
+fn merge2(map1: FnvHashMap<(), ()>, map2: FnvHashMap<(), ()>) -> FnvHashMap<(), ()> {
+    map1.into_iter().chain(map2).collect()
+}
+
+pub type WordsIndexBorrowing = FnvHashMap<String, &'static FnvHashMap<u32, FnvHashMap<usize, usize>>>;
 #[wasm_bindgen]
 pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue) -> JsValue {
+    let t_0 = web_sys::window().unwrap().performance().unwrap().now();
+
     let search_preferences: preferences::SearchPreferences = search_preferences_js.into_serde().unwrap();
     if !preferences::check_can_search(&search_term_raw, &search_preferences) {
         let no_results: Vec<String> = vec![];
@@ -241,14 +253,14 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
 
     let search_term = &make_splittable(&search_term_raw.to_lowercase());
 
-    let search_stems: HashSet<_> = search_term
+    let search_stems: FnvHashSet<_> = search_term
         .split_whitespace()
         .map(|term| STEMMER.stem(term).to_string())
         .collect();
     let possible_matches: WordsIndexBorrowing =
         search_stems
             .iter()
-            .fold(HashMap::new(), |mut matching_index, term| {
+            .fold(FnvHashMap::default(), |mut matching_index, term| {
                 if let Some(v) = (&*WORDS_INDEX).get(term) {
                     matching_index.insert(term.to_string(), v);
                 }
@@ -258,16 +270,16 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     let verse_paths_index = &*VERSE_PATHS_INDEX;
 
     log!("about to use paths index");
-    let or_matches: HashSet<u32> = possible_matches
+    let or_matches: FnvHashSet<u32> = possible_matches
         .iter()
         .flat_map(|(_k, v)| v.keys())
         .map(|x| *x)
         .filter(|x| check_collection_searchable(paths_index.get(x).unwrap(), &search_preferences))
         .collect();
 
-    let and_matches: HashSet<u32> = possible_matches.iter().fold(or_matches, |acc, (_k, v)| {
-        let current_matches: HashSet<u32> = v.keys().map(|x| *x).collect();
-        let result: HashSet<u32> = acc.intersection(&current_matches).map(|x| *x).collect();
+    let and_matches: FnvHashSet<u32> = possible_matches.iter().fold(or_matches, |acc, (_k, v)| {
+        let current_matches: FnvHashSet<u32> = v.keys().map(|x| *x).collect();
+        let result: FnvHashSet<u32> = acc.intersection(&current_matches).map(|x| *x).collect();
         result
     });
 
@@ -279,15 +291,13 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
             (verse_path, highlights)
         })
         .fold(
-            HashMap::new(),
-            |mut acc: HashMap<&VersePath, Vec<(usize, usize)>>, (verse_path, highlights)| {
-                let mut cloned = highlights.clone();
+            FnvHashMap::default(),
+            |mut acc: FnvHashMap<&VersePath, FnvHashMap<usize, usize>>, (verse_path, highlights)| {
                 acc.entry(verse_path)
                     .and_modify(|existing_highlights| {
-                        existing_highlights.append(&mut cloned);
-                        existing_highlights.sort();
+                        existing_highlights.extend(highlights);
                     })
-                    .or_insert(cloned);
+                    .or_insert(highlights.clone());
                 acc
             },
         )
@@ -299,5 +309,8 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
         .collect();
     verses.sort_unstable_by(|a, b| a.cmp(b));
     let sorted_verses: Vec<&String> = verses.iter().map(|(_, text)| text).collect();
+
+    let t_1 = web_sys::window().unwrap().performance().unwrap().now();
+    log!("text search time: {:?}", t_1 - t_0);
     JsValue::from_serde(&sorted_verses).unwrap()
 }

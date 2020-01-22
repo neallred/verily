@@ -2,6 +2,9 @@ extern crate scripture_types;
 extern crate rust_stemmers;
 use rust_stemmers::{Algorithm, Stemmer};
 use std::collections::HashMap;
+use fnv::FnvHashMap;
+use fnv::FnvHashSet;
+use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 
 pub enum HasBooks<'a> {
@@ -72,26 +75,27 @@ pub fn build_index(
     bom: &scripture_types::BookOfMormon,
     dc: &scripture_types::DoctrineAndCovenants,
     pogp: &scripture_types::PearlOfGreatPrice,
-) -> (scripture_types::WordsIndex, scripture_types::PathsIndex) {
+) -> (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights, scripture_types::PathsIndex) {
     let mut scripture_id: u32 = 0;
 
     let en_stemmer = Stemmer::create(Algorithm::English);
 
-    let indices: (scripture_types::WordsIndex, scripture_types::PathsIndex) =
-        (HashMap::new(), HashMap::new());
+    let indices: ((scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), scripture_types::PathsIndex) =
+        ((FnvHashMap::default(), FnvHashMap::default()), FnvHashMap::default());
 
-    let count_word_usage = |mut words_index: scripture_types::WordsIndex, verse: &String, (i_from, i_to): &(usize, usize), scripture_id: u32| {
+    let count_word_usage = |(mut words_index, mut words_index_no_highlights): (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), verse: &String, (i_from, i_to): &(usize, usize), scripture_id: u32| {
         let f = *i_from;
         let t = *i_to;
         let word_slice = &verse[f..t].to_lowercase();
         let stemmed = en_stemmer.stem(word_slice).to_string();
-        let to_insert = vec![(f, t)];
+        let stemmed_copy = stemmed.clone();
+        let mut to_insert: FnvHashMap<usize, usize> = FnvHashMap::default();
+        to_insert.insert(f, t);
 
         match words_index.entry(stemmed) {
             Entry::Vacant(vacant) => {
-                let mut verses_using_word = HashMap::new();
+                let mut verses_using_word = FnvHashMap::default();
                 verses_using_word.insert(scripture_id, to_insert);
-                // verses_using_word
 
                 vacant.insert(verses_using_word);
             },
@@ -99,25 +103,39 @@ pub fn build_index(
                 let verses_using_word_val = verses_using_word.get_mut();
                 let verse_usage_entry = verses_using_word_val.entry(scripture_id);
                 verse_usage_entry
-                    .and_modify(|verse_usage| { verse_usage.push((f,t)) })
+                    .and_modify(|verse_usage| { verse_usage.insert(f,t); })
                     .or_insert(to_insert);
             },
         };
 
-        words_index
+        match words_index_no_highlights.entry(stemmed_copy) {
+            Entry::Vacant(vacant) => {
+                let mut verses_using_word = FnvHashSet::default();
+                verses_using_word.insert(scripture_id);
+
+                vacant.insert(verses_using_word);
+            },
+            Entry::Occupied(mut verses_using_word) => {
+                let verses_using_word_val = verses_using_word.get_mut();
+                verses_using_word_val
+                    .insert(scripture_id);
+            },
+        };
+
+        (words_index, words_index_no_highlights)
     };
 
-    let count_verse = |verse_text: &String, words_index: scripture_types::WordsIndex, id| {
+    let count_verse = |verse_text: &String, indices: (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), id| {
         let index_with_verse_added = get_word_ranges(verse_text)
             .iter()
-            .fold(words_index, |acc, word_indices| count_word_usage(acc, verse_text, word_indices, id));
+            .fold(indices, |acc, word_indices| count_word_usage(acc, verse_text, word_indices, id));
         index_with_verse_added
     };
 
     // Old Testament
     let indices = prepare_book_paths(HasBooks::OT(ot)).iter().fold(
         indices,
-        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+        |(words_indices, mut path_index), (book_num, chapter_num, verse)| {
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
@@ -128,7 +146,7 @@ pub fn build_index(
                 ),
             );
             (
-                count_verse(&verse.text, words_index, scripture_id),
+                count_verse(&verse.text, words_indices, scripture_id),
                 path_index,
             )
         },
@@ -137,7 +155,7 @@ pub fn build_index(
     // New Testament
     let indices = prepare_book_paths(HasBooks::NT(nt)).iter().fold(
         indices,
-        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+        |(words_indices, mut path_index), (book_num, chapter_num, verse)| {
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
@@ -148,7 +166,7 @@ pub fn build_index(
                 ),
             );
             (
-                count_verse(&verse.text, words_index, scripture_id),
+                count_verse(&verse.text, words_indices, scripture_id),
                 path_index,
             )
         },
@@ -157,7 +175,7 @@ pub fn build_index(
     // Book of Mormon
     let indices = prepare_book_paths(HasBooks::BOM(bom)).iter().fold(
         indices,
-        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+        |(words_indices, mut path_index), (book_num, chapter_num, verse)| {
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
@@ -168,7 +186,7 @@ pub fn build_index(
                 ),
             );
             (
-                count_verse(&verse.text, words_index, scripture_id),
+                count_verse(&verse.text, words_indices, scripture_id),
                 path_index,
             )
         },
@@ -192,14 +210,14 @@ pub fn build_index(
 
     let indices = with_section_nums.iter().fold(
         indices,
-        |(words_index, mut path_index), (section_num, verse)| {
+        |(words_indices, mut path_index), (section_num, verse)| {
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
                 scripture_types::VersePath::PathDC(*section_num, verse.verse as usize - 1),
             );
             (
-                count_verse(&verse.text, words_index, scripture_id),
+                count_verse(&verse.text, words_indices, scripture_id),
                 path_index,
             )
         },
@@ -208,18 +226,18 @@ pub fn build_index(
     // Pearl of Great Price
     let indices = prepare_book_paths(HasBooks::POGP(pogp)).iter().fold(
         indices,
-        |(words_index, mut path_index), (book_num, chapter_num, verse)| {
+        |(words_indices, mut path_index), (book_num, chapter_num, verse)| {
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
                 scripture_types::VersePath::PathPOGP(*book_num, *chapter_num, verse.verse as usize - 1),
             );
             (
-                count_verse(&verse.text, words_index, scripture_id),
+                count_verse(&verse.text, words_indices, scripture_id),
                 path_index,
             )
         },
     );
 
-    indices
+    ((indices.0).0, (indices.0).1, indices.1)
 }

@@ -22,6 +22,7 @@ serde = { version = "1.0.103", features = ["derive"] }
 serde_derive = "1.0.103"  
 serde_json = "1.0.42"
 bincode = "1.2.1"
+fnv = "1.0.6"
 
 scripture-types = { path = "../scripture-types" }
 
@@ -49,7 +50,9 @@ wasm-bindgen-test = "0.2"
 # link time optimizations
 lto = true
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+# opt-level = "s"
+# Tell `rustc` to optimize for small code speed.
+opt-level = 3
 
 [dependencies.web-sys]
 version = "0.3"
