@@ -1,20 +1,29 @@
 extern crate scripture_types;
 extern crate rust_stemmers;
 use rust_stemmers::{Algorithm, Stemmer};
-use std::collections::HashMap;
 use fnv::FnvHashMap;
-use fnv::FnvHashSet;
-use std::collections::HashSet;
 use std::collections::hash_map::Entry;
+use scripture_types::{
+    OldTestament,
+    NewTestament,
+    BookOfMormon,
+    DoctrineAndCovenants,
+    PearlOfGreatPrice,
+    Verse,
+    Chapter,
+    WordsIndex,
+    PathsIndex,
+    VersePath,
+};
 
 pub enum HasBooks<'a> {
-    OT(&'a scripture_types::OldTestament),
-    NT(&'a scripture_types::NewTestament),
-    BOM(&'a scripture_types::BookOfMormon),
-    POGP(&'a scripture_types::PearlOfGreatPrice),
+    OT(&'a OldTestament),
+    NT(&'a NewTestament),
+    BOM(&'a BookOfMormon),
+    POGP(&'a PearlOfGreatPrice),
 }
 
-fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(usize, usize, &'a scripture_types::Verse)> {
+fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(u8, u8, &'a Verse)> {
     let (books, title) = match coll {
         HasBooks::OT(x) => (&x.books, &x.title),
         HasBooks::NT(x) => (&x.books, &x.title),
@@ -22,12 +31,12 @@ fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(usize, usize, &'a scriptur
         HasBooks::POGP(x) => (&x.books, &x.title),
     };
     println!("    {}", title);
-    let with_books: Vec<(usize, &scripture_types::Chapter)> = books
+    let with_books: Vec<(u8, &Chapter)> = books
         .iter()
         .enumerate()
         .flat_map(|(book_num, book)| {
-            let with_books: Vec<(usize, &scripture_types::Chapter)> =
-                book.chapters.iter().map(|cs| (book_num, cs)).collect();
+            let with_books: Vec<(u8, &Chapter)> =
+                book.chapters.iter().map(|cs| (book_num as u8, cs)).collect();
 
             with_books
         })
@@ -36,10 +45,10 @@ fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(usize, usize, &'a scriptur
     let with_chapters = with_books
         .iter()
         .flat_map(|(book_num, chapter)| {
-            let with_verses: Vec<(usize, usize, &scripture_types::Verse)> = chapter
+            let with_verses: Vec<(u8, u8, &Verse)> = chapter
                 .verses
                 .iter()
-                .map(|v| (*book_num, chapter.chapter as usize - 1, v))
+                .map(|v| (*book_num, chapter.chapter - 1, v))
                 .collect();
 
             with_verses
@@ -70,27 +79,30 @@ fn get_word_ranges(text: &String) -> Vec<(usize, usize)> {
 }
 
 pub fn build_index(
-    ot: &scripture_types::OldTestament,
-    nt: &scripture_types::NewTestament,
-    bom: &scripture_types::BookOfMormon,
-    dc: &scripture_types::DoctrineAndCovenants,
-    pogp: &scripture_types::PearlOfGreatPrice,
-) -> (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights, scripture_types::PathsIndex) {
-    let mut scripture_id: u32 = 0;
+    ot: &OldTestament,
+    nt: &NewTestament,
+    bom: &BookOfMormon,
+    dc: &DoctrineAndCovenants,
+    pogp: &PearlOfGreatPrice,
+) -> (WordsIndex, PathsIndex) {
+    let mut scripture_id: u16 = 0;
 
     let en_stemmer = Stemmer::create(Algorithm::English);
 
-    let indices: ((scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), scripture_types::PathsIndex) =
-        ((FnvHashMap::default(), FnvHashMap::default()), FnvHashMap::default());
+    let indices: (WordsIndex, PathsIndex) =
+        (FnvHashMap::default(), FnvHashMap::default());
 
-    let count_word_usage = |(mut words_index, mut words_index_no_highlights): (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), verse: &String, (i_from, i_to): &(usize, usize), scripture_id: u32| {
+    let count_word_usage = |mut words_index: WordsIndex, verse: &String, (i_from, i_to): &(usize, usize), scripture_id: u16| {
         let f = *i_from;
         let t = *i_to;
+
+        let i = *i_from;
+        let l = t - i;
+
         let word_slice = &verse[f..t].to_lowercase();
         let stemmed = en_stemmer.stem(word_slice).to_string();
-        let stemmed_copy = stemmed.clone();
         let mut to_insert: FnvHashMap<usize, usize> = FnvHashMap::default();
-        to_insert.insert(f, t);
+        to_insert.insert(i, l);
 
         match words_index.entry(stemmed) {
             Entry::Vacant(vacant) => {
@@ -103,32 +115,18 @@ pub fn build_index(
                 let verses_using_word_val = verses_using_word.get_mut();
                 let verse_usage_entry = verses_using_word_val.entry(scripture_id);
                 verse_usage_entry
-                    .and_modify(|verse_usage| { verse_usage.insert(f,t); })
+                    .and_modify(|verse_usage| { verse_usage.insert(i,l); })
                     .or_insert(to_insert);
             },
         };
 
-        match words_index_no_highlights.entry(stemmed_copy) {
-            Entry::Vacant(vacant) => {
-                let mut verses_using_word = FnvHashSet::default();
-                verses_using_word.insert(scripture_id);
-
-                vacant.insert(verses_using_word);
-            },
-            Entry::Occupied(mut verses_using_word) => {
-                let verses_using_word_val = verses_using_word.get_mut();
-                verses_using_word_val
-                    .insert(scripture_id);
-            },
-        };
-
-        (words_index, words_index_no_highlights)
+        words_index
     };
 
-    let count_verse = |verse_text: &String, indices: (scripture_types::WordsIndex, scripture_types::WordsIndexNoHighlights), id| {
+    let count_verse = |verse_text: &String, words_index: WordsIndex, id| {
         let index_with_verse_added = get_word_ranges(verse_text)
             .iter()
-            .fold(indices, |acc, word_indices| count_word_usage(acc, verse_text, word_indices, id));
+            .fold(words_index, |acc, word_indices| count_word_usage(acc, verse_text, word_indices, id));
         index_with_verse_added
     };
 
@@ -139,10 +137,10 @@ pub fn build_index(
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
-                scripture_types::VersePath::PathOT(
+                VersePath::PathOT(
                     *book_num,
                     *chapter_num,
-                    verse.verse as usize - 1,
+                    verse.verse - 1,
                 ),
             );
             (
@@ -159,10 +157,10 @@ pub fn build_index(
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
-                scripture_types::VersePath::PathNT(
+                VersePath::PathNT(
                     *book_num,
                     *chapter_num,
-                    verse.verse as usize - 1,
+                    verse.verse - 1,
                 ),
             );
             (
@@ -179,10 +177,10 @@ pub fn build_index(
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
-                scripture_types::VersePath::PathBoM(
+                VersePath::PathBoM(
                     *book_num,
                     *chapter_num,
-                    verse.verse as usize - 1,
+                    verse.verse - 1,
                 ),
             );
             (
@@ -194,11 +192,11 @@ pub fn build_index(
 
     // Doctrine and Covenants
     println!("    {}", dc.title);
-    let with_section_nums: Vec<(usize, &scripture_types::Verse)> = (dc)
+    let with_section_nums: Vec<(usize, &Verse)> = (dc)
         .sections
         .iter()
         .flat_map(|section| {
-            let with_section_nums: Vec<(usize, &scripture_types::Verse)> = section
+            let with_section_nums: Vec<(usize, &Verse)> = section
                 .verses
                 .iter()
                 .map(|v| (section.section as usize - 1, v))
@@ -214,7 +212,7 @@ pub fn build_index(
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
-                scripture_types::VersePath::PathDC(*section_num, verse.verse as usize - 1),
+                VersePath::PathDC(*section_num as u8, verse.verse - 1),
             );
             (
                 count_verse(&verse.text, words_indices, scripture_id),
@@ -230,7 +228,7 @@ pub fn build_index(
             scripture_id += 1;
             path_index.insert(
                 scripture_id,
-                scripture_types::VersePath::PathPOGP(*book_num, *chapter_num, verse.verse as usize - 1),
+                VersePath::PathPOGP(*book_num, *chapter_num, verse.verse - 1),
             );
             (
                 count_verse(&verse.text, words_indices, scripture_id),
@@ -239,5 +237,5 @@ pub fn build_index(
         },
     );
 
-    ((indices.0).0, (indices.0).1, indices.1)
+    (indices.0, indices.1)
 }

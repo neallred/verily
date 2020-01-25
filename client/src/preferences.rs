@@ -33,7 +33,7 @@ pub struct IncludedBooks {
     pub ot: Vec<String>,
     pub nt: Vec<String>,
     pub bom: Vec<String>,
-    pub dc: (u64, u64),
+    pub dc: (u8, u8),
     pub pogp: Vec<String>,
 }
 

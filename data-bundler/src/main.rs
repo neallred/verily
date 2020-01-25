@@ -1,10 +1,9 @@
 extern crate scripture_types;
+extern crate phf_codegen;
+extern crate phf;
 use std::fs::File;
-use std::io::BufReader;
-use std::io::BufWriter;
-use std::io::Read;
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
-use std::io::Write;
 
 use data_bundler;
 
@@ -28,6 +27,16 @@ fn ensure_data_source(test_path: &std::path::PathBuf) {
             .arg(format!("{} i", NPM))
             .status()
             .expect("Unable to install data source");
+    }
+}
+
+fn repr_verse_path(verse_path: &scripture_types::VersePath) -> String {
+    match verse_path {
+        scripture_types::VersePath::PathBoM(a, b, c) => format!("VersePath::PathBoM({},{},{})", a, b, c),
+        scripture_types::VersePath::PathOT(a, b, c) => format!("VersePath::PathOT({},{},{})", a, b, c),
+        scripture_types::VersePath::PathNT(a, b, c) => format!("VersePath::PathNT({},{},{})", a, b, c),
+        scripture_types::VersePath::PathPOGP(a, b, c) => format!("VersePath::PathPOGP({},{},{})", a, b, c),
+        scripture_types::VersePath::PathDC(a, b) => format!("VersePath::PathDC({},{})", a, b),
     }
 }
 
@@ -132,11 +141,67 @@ fn main() {
     println!("Minifying done!\n");
 
     println!("Building indices:");
-    let (words_index, words_index_no_highlighting, paths_index) = data_bundler::build_index(&ot, &nt, &bom, &dc, &pogp);
+    let (words_index, paths_index) = data_bundler::build_index(&ot, &nt, &bom, &dc, &pogp);
     println!("Index building done!\n");
     println!("total word stems: {}", words_index.len());
     println!("total paths: {}", paths_index.len());
     write_minified(&paths_index, &dest_folder, "paths-index.json");
     write_minified(&words_index, &dest_folder, "words-index.json");
-    write_minified(&words_index_no_highlighting, &dest_folder, "words-index-no-highlights.json");
+
+    let mut paths_index_codegen_file = dest_folder.clone();
+    paths_index_codegen_file.push("codegen-paths-index.rs");
+
+    println!("generating paths index codegen file...");
+
+    let mut paths_index_phf: phf_codegen::Map<u16> = phf_codegen::Map::new();
+    // let mut verse_paths_index_phf: phf_codegen::Map<scripture_types::VersePath> = phf_codegen::Map::new();
+    for (k, v) in &paths_index {
+        paths_index_phf.entry(*k, &repr_verse_path(v));
+
+        // verse_paths_index_phf.entry(v, k.to_string().as_str());
+    }
+
+    println!("writing paths index codegen file...");
+
+    let mut f_codegen = BufWriter::new(File::create(paths_index_codegen_file).unwrap());
+
+    writeln!(
+        &mut f_codegen,
+        "static PHF_PATHS_INDEX: phf::Map<u16, scripture_types::VersePath> = \n{};\n",
+        paths_index_phf.build(),
+    ).unwrap();
+
+
+
+
+    let mut words_index_codegen_file = dest_folder.clone();
+    words_index_codegen_file.push("codegen-words-index.rs");
+
+    println!("generating words index codegen file...");
+
+    let mut words_index_phf: phf_codegen::Map<&str> = phf_codegen::Map::new();
+    for (word, usage_map) in &words_index {
+        let mut usages_phf: phf_codegen::Map<u16> = phf_codegen::Map::new();
+        for (scripture_id, highlights_map) in usage_map {
+            let mut highlights_vec: Vec<(u32, u32)> = vec![];
+            for (from, to) in highlights_map {
+                highlights_vec.push((*from as u32, *to as u32));
+            }
+            highlights_vec.sort();
+            usages_phf.entry(*scripture_id, &format!("ArrWrap::A{}({:?})", highlights_vec.len(), highlights_vec));
+        }
+        let built_usages_phf = usages_phf.build();
+        words_index_phf.entry(word, &built_usages_phf.to_string());
+    }
+
+
+    println!("writing words index codegen file...");
+
+    let mut f_codegen_words_index = BufWriter::new(File::create(words_index_codegen_file).unwrap());
+
+    writeln!(
+        &mut f_codegen_words_index,
+        "static PHF_WORDS_INDEX: phf::Map<&str, phf::Map<u16, ArrWrap>> = \n{};\n",
+        words_index_phf.build(),
+    ).unwrap();
 }
