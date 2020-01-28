@@ -1,11 +1,14 @@
+extern crate phf;
 extern crate rust_stemmers;
-extern crate scripture_types;
 extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
+use primitive_types::U256;
 use regex::Regex;
 use rust_stemmers::{Algorithm, Stemmer};
-extern crate phf;
+
+extern crate scripture_types;
+extern crate data_bundler;
 
 mod utils;
 mod preferences;
@@ -15,7 +18,7 @@ extern crate lazy_static;
 
 use scripture_types::{
     BookOfMormon, DoctrineAndCovenants, NewTestament, OldTestament, VersePathsIndex, PearlOfGreatPrice,
-    VersePath, ArrWrap
+    VersePath
 };
 use fnv::FnvHashMap;
 use fnv::FnvHashSet;
@@ -107,31 +110,8 @@ fn make_link(verse_path: &scripture_types::VersePath) -> String {
 }
 
 // fn extract_highlights(wrapped: &ArrWrap) -> Vec<(usize, usize)> {
-fn extract_highlights(wrapped: &ArrWrap) -> Vec<(u16, u8)> {
-    match wrapped {
-        &ArrWrap::A1([a]) => vec![a],
-        &ArrWrap::A2([a,b]) => vec![a,b],
-        &ArrWrap::A3([a,b,c]) => vec![a,b,c],
-        &ArrWrap::A4([a,b,c,d]) => vec![a,b,c,d],
-        &ArrWrap::A5([a,b,c,d,e]) => vec![a,b,c,d,e],
-        &ArrWrap::A6([a,b,c,d,e,f]) => vec![a,b,c,d,e,f],
-        &ArrWrap::A7([a,b,c,d,e,f,g]) => vec![a,b,c,d,e,f,g],
-        &ArrWrap::A8([a,b,c,d,e,f,g,h]) => vec![a,b,c,d,e,f,g,h],
-        &ArrWrap::A9([a,b,c,d,e,f,g,h,i]) => vec![a,b,c,d,e,f,g,h,i],
-        &ArrWrap::A10([a,b,c,d,e,f,g,h,i,j]) => vec![a,b,c,d,e,f,g,h,i,j],
-        &ArrWrap::A11([a,b,c,d,e,f,g,h,i,j,k]) => vec![a,b,c,d,e,f,g,h,i,j,k],
-        &ArrWrap::A12([a,b,c,d,e,f,g,h,i,j,k,l]) => vec![a,b,c,d,e,f,g,h,i,j,k,l],
-        &ArrWrap::A13([a,b,c,d,e,f,g,h,i,j,k,l,m]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m],
-        &ArrWrap::A14([a,b,c,d,e,f,g,h,i,j,k,l,m,n]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n],
-        &ArrWrap::A15([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o],
-        &ArrWrap::A16([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p],
-        &ArrWrap::A17([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q],
-        &ArrWrap::A18([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r],
-        &ArrWrap::A19([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s],
-        &ArrWrap::A20([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t],
-        &ArrWrap::A21([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u],
-        &ArrWrap::A22([a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v]) => vec![a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v],
-    }
+fn extract_highlights((indices, lengths): &(U256, u128)) -> Vec<(u16, u8)> {
+    data_bundler::unpack_indices(*indices).iter().cloned().zip(data_bundler::unpack_lengths(*lengths)).collect()
 }
 
 // fn highlight_matches(text: &String, highlights: &Vec<(usize, usize)>) -> String {
@@ -192,11 +172,11 @@ pub fn bootstrap_searcher() {
     // Force the minimal amount of work to initialize all data structures
     // so that user searches are speedy.
     let empty_preferences = preferences::make_empty_preferences();
-    // full_match_search(
-    //     // common words
-    //     String::from("god and the faith"),
-    //     JsValue::from_serde(&empty_preferences).unwrap(),
-    // );
+    full_match_search(
+        // common words
+        String::from("god and the faith"),
+        JsValue::from_serde(&empty_preferences).unwrap(),
+    );
 }
 
 fn make_splittable(text: &String) -> String {
@@ -254,7 +234,7 @@ fn check_collection_searchable(verse_path: &VersePath, preferences: &preferences
     return_value
 }
 
-pub type WordsIndexBorrowing = FnvHashMap<String, &'static phf::Map<u16, ArrWrap>>;
+pub type WordsIndexBorrowing = FnvHashMap<String, &'static phf::Map<u16, (U256,u128)>>;
 #[wasm_bindgen]
 pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue) -> JsValue {
     let t_0 = web_sys::window().unwrap().performance().unwrap().now();

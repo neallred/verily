@@ -2,54 +2,16 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate phf;
+use primitive_types::U256;
 
 use serde::{Deserialize, Serialize};
 use fnv::FnvHashMap;
 
-#[derive(Serialize, Deserialize, Debug, Hash, Clone)]
-pub enum ArrWrap {
-    A1([(u16, u8); 1]),
-    A2([(u16, u8); 2]),
-    A3([(u16, u8); 3]),
-    A4([(u16, u8); 4]),
-    A5([(u16, u8); 5]),
-    A6([(u16, u8); 6]),
-    A7([(u16, u8); 7]),
-    A8([(u16, u8); 8]),
-    A9([(u16, u8); 9]),
-    A10([(u16, u8); 10]),
-    A11([(u16, u8); 11]),
-    A12([(u16, u8); 12]),
-    A13([(u16, u8); 13]),
-    A14([(u16, u8); 14]),
-    A15([(u16, u8); 15]),
-    A16([(u16, u8); 16]),
-    A17([(u16, u8); 17]),
-    A18([(u16, u8); 18]),
-    A19([(u16, u8); 19]),
-    A20([(u16, u8); 20]),
-    A21([(u16, u8); 21]),
-    A22([(u16, u8); 22]),
-//     The longest number of highlights is A22.
-//     The biggest number of highlight index is 1168.
-//     Exclude all other possibilities to take up the least amount of memory possible
-//     (Need this to run on low end devices).
-//     A23([(u16, u8); 23]),
-//     A24([(u16, u8); 24]),
-//     A25([(u16, u8); 25]),
-//     A26([(u16, u8); 26]),
-//     A27([(u16, u8); 27]),
-//     A28([(u16, u8); 28]),
-//     A29([(u16, u8); 29]),
-//     A30([(u16, u8); 30]),
-//     A31([(u16, u8); 31]),
-//     A32([(u16, u8); 32]),
-}
-
-pub type WordsIndex = FnvHashMap<String, FnvHashMap<u16, FnvHashMap<usize, usize>>>;
+pub type WordsIndex = FnvHashMap<String, FnvHashMap<u16, Vec<(usize, usize)>>>;
 pub type PathsIndex = FnvHashMap<u16, VersePath>;
-pub type PhfPathsIndex = phf::Map<u16, VersePath>;
 pub type VersePathsIndex = FnvHashMap<VersePath, u16>;
+pub type PhfPathsIndex = phf::Map<u16, VersePath>;
+pub type PhfWordsIndex = phf::Map<&'static str, phf::Map<u16, (U256, u128)>>;
 
 pub fn paths_to_verse_paths_index(paths: &PhfPathsIndex) -> VersePathsIndex {
     paths

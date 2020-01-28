@@ -22,6 +22,7 @@ pub enum HasBooks<'a> {
     BOM(&'a BookOfMormon),
     POGP(&'a PearlOfGreatPrice),
 }
+use primitive_types::U256;
 
 fn prepare_book_paths<'a>(coll: HasBooks<'a>) -> Vec<(u8, u8, &'a Verse)> {
     let (books, title) = match coll {
@@ -78,6 +79,119 @@ fn get_word_ranges(text: &String) -> Vec<(usize, usize)> {
     results
 }
 
+// unsafe
+// each highlight length (u8) must be no bigger than 5 bits
+pub fn pack_lengths(lengths: &Vec<u8>) -> u128 {
+    let mut result: u128 = 0;
+    for i in lengths {
+        if result > 0 {
+            result = result << 5;
+        }
+        result = result + *i as u128
+    }
+    result
+}
+
+pub fn unpack_lengths(packed: u128) -> Vec<u8> {
+    let mut tmp = packed.clone();
+    let mut result: Vec<u8> = vec![];
+
+    while tmp > 0 {
+        let diff = (tmp >> 5) << 5;
+        result.push((tmp - diff) as u8);
+        tmp = diff >> 5;
+    }
+    result.iter().map(|x| *x).rev().collect()
+}
+
+// unsafe
+// u16s must be no bigger than 11 bits - 1 (need each chunk to have a min value of 1) for efficient
+// unpacking
+pub fn pack_indices(indices: &Vec<u16>) -> U256 {
+    // offset all by one.
+    let mut result: U256 = U256::from(0);
+    for i in indices {
+        if !result.is_zero() {
+            result = result << 11;
+        }
+        result = result + U256::from(*i + 1);
+    }
+    result
+}
+
+pub fn pack_indices_arr(indices: &Vec<u16>) -> [u64;4] {
+    // offset all by one.
+    let mut num: U256 = U256::from(0);
+    for i in indices {
+        if !num.is_zero() {
+            num = num << 11;
+        }
+        num = num + U256::from(*i + 1);
+    }
+
+    let mut num_arr: [u64;4] = [0,0,0,0];
+
+    let new_num = num >> 64 << 64;
+    num_arr[0] = (num - new_num).as_u64();
+    num = new_num;
+
+    let new_num = num >> 64 << 64;
+    num_arr[1] = (num - new_num).as_u64();
+    num = new_num;
+
+    let new_num = num >> 64 << 64;
+    num_arr[2] = (num - new_num).as_u64();
+    num = new_num;
+
+    let new_num = num >> 64 << 64;
+    num_arr[3] = (num - new_num).as_u64();
+    num = new_num;
+
+    num_arr
+}
+
+pub fn unpack_indices(packed: U256) -> Vec<u16> {
+    // offset all by one.
+    let mut tmp = packed.clone();
+    let mut result: Vec<u16> = vec![];
+
+    while !tmp.is_zero() {
+        let diff = (tmp >> 11) << 11;
+        result.push(((tmp - diff) - 1).as_u32() as u16);
+        tmp = diff >> 11;
+    }
+    result.iter().map(|x| *x).rev().collect()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_round_trip(lenghts: Vec<u8>) {
+        assert_eq!(lenghts, unpack_lengths(pack_lengths(&lenghts)));
+    }
+
+    fn test_round_trip_indices(indices: Vec<u16>) {
+        assert_eq!(indices, unpack_indices(pack_indices(&indices)));
+    }
+
+    #[test]
+    fn packs_and_unpacks_highlight_lengths_less_than_32_up_to_22_elements() {
+        test_round_trip(vec![]);
+        test_round_trip((1..22).collect());
+        test_round_trip((10..31).collect());
+    }
+
+    #[test]
+    fn packs_and_unpacks_highlight_indices_less_than_2048_up_to_22_elements() {
+        test_round_trip_indices(vec![]);
+        test_round_trip_indices(vec![1234,2046,0,1,2,3,4,5,88]);
+        test_round_trip_indices((0..21).collect());
+        test_round_trip_indices((2025..2046).collect());
+    }
+}
+
 pub fn build_index(
     ot: &OldTestament,
     nt: &NewTestament,
@@ -101,8 +215,7 @@ pub fn build_index(
 
         let word_slice = &verse[f..t].to_lowercase();
         let stemmed = en_stemmer.stem(word_slice).to_string();
-        let mut to_insert: FnvHashMap<usize, usize> = FnvHashMap::default();
-        to_insert.insert(i, l);
+        let to_insert: Vec<(usize, usize)> = vec![(i, l)];
 
         match words_index.entry(stemmed) {
             Entry::Vacant(vacant) => {
@@ -115,7 +228,7 @@ pub fn build_index(
                 let verses_using_word_val = verses_using_word.get_mut();
                 let verse_usage_entry = verses_using_word_val.entry(scripture_id);
                 verse_usage_entry
-                    .and_modify(|verse_usage| { verse_usage.insert(i,l); })
+                    .and_modify(|verse_usage| { verse_usage.push((i,l)); })
                     .or_insert(to_insert);
             },
         };

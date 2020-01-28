@@ -57,15 +57,23 @@ export default function Form({
           flex: '0 0 auto',
         }}
       />
-      { typeof resultCount === 'number' && <span style={{
-        position: 'absolute',
-        left: '100%',
-        whiteSpace: 'nowrap',
-        alignSelf: 'center',
+      { false && typeof resultCount === 'number' && <div style={{
+        // position: 'absolute',
+        // left: '100%',
+        // whiteSpace: 'nowrap',
+        // alignSelf: 'center',
       }}>
         {resultCount} results
-      </span>}
+      </div>}
     </div>
+      { typeof resultCount === 'number' && <div style={{
+        // position: 'absolute',
+        // left: '100%',
+        // whiteSpace: 'nowrap',
+        // alignSelf: 'center',
+      }}>
+        {resultCount} results
+      </div>}
     {preferencesOpen &&
       <Preferences
         preferences={preferences}

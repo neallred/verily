@@ -154,11 +154,8 @@ fn main() {
     println!("generating paths index codegen file...");
 
     let mut paths_index_phf: phf_codegen::Map<u16> = phf_codegen::Map::new();
-    // let mut verse_paths_index_phf: phf_codegen::Map<scripture_types::VersePath> = phf_codegen::Map::new();
     for (k, v) in &paths_index {
         paths_index_phf.entry(*k, &repr_verse_path(v));
-
-        // verse_paths_index_phf.entry(v, k.to_string().as_str());
     }
 
     println!("writing paths index codegen file...");
@@ -182,13 +179,16 @@ fn main() {
     let mut words_index_phf: phf_codegen::Map<&str> = phf_codegen::Map::new();
     for (word, usage_map) in &words_index {
         let mut usages_phf: phf_codegen::Map<u16> = phf_codegen::Map::new();
-        for (scripture_id, highlights_map) in usage_map {
-            let mut highlights_vec: Vec<(u32, u32)> = vec![];
-            for (from, to) in highlights_map {
-                highlights_vec.push((*from as u32, *to as u32));
-            }
-            highlights_vec.sort();
-            usages_phf.entry(*scripture_id, &format!("ArrWrap::A{}({:?})", highlights_vec.len(), highlights_vec));
+        for (scripture_id, highlights_vec) in usage_map {
+            let (i_s, l_s): (Vec<_>, Vec<_>) = highlights_vec.iter().cloned().map(|(x,y)| (x as u16, y as u8)).unzip();
+            usages_phf.entry(
+                *scripture_id,
+                &format!(
+                    "(U256 {{ 0: {:?} }},{})",
+                    data_bundler::pack_indices_arr(&i_s),
+                    data_bundler::pack_lengths(&l_s),
+                ),
+            );
         }
         let built_usages_phf = usages_phf.build();
         words_index_phf.entry(word, &built_usages_phf.to_string());
@@ -201,7 +201,7 @@ fn main() {
 
     writeln!(
         &mut f_codegen_words_index,
-        "static PHF_WORDS_INDEX: phf::Map<&str, phf::Map<u16, ArrWrap>> = \n{};\n",
+        "static PHF_WORDS_INDEX: phf::Map<&str, phf::Map<u16, (U256,u128)>> = \n{};\n",
         words_index_phf.build(),
     ).unwrap();
 }

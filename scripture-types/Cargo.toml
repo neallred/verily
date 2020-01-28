@@ -14,6 +14,7 @@ fnv = "1.0.6"
 phf = "0.8.0"
 phf_codegen = "0.8.0"
 phf_shared  = "0.8.0"
+primitive-types = "0.6.2"
 
 [dependencies.wasm-bindgen]
 version = "0.2"
