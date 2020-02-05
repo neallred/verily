@@ -145,7 +145,6 @@ pub fn pack_indices_arr(indices: &Vec<u16>) -> [u64;4] {
 
     let new_num = num >> 64 << 64;
     num_arr[3] = (num - new_num).as_u64();
-    num = new_num;
 
     num_arr
 }

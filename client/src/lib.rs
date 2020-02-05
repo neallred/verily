@@ -50,9 +50,6 @@ static BIN_DOCTRINE_AND_COVENANTS: &'static [u8] =
 static BIN_PEARL_OF_GREAT_PRICE: &'static [u8] =
     include_bytes!("../../data-bundler/data/pearl-of-great-price.json.bin");
 
-include!("../../data-bundler/data/codegen-paths-index.rs");
-include!("../../data-bundler/data/codegen-words-index.rs");
-
 static BASE_URL: &'static str = "https://www.churchofjesuschrist.org/study/scriptures";
 lazy_static! {
     static ref BOOK_OF_MORMON: BookOfMormon = adserde(BIN_BOOK_OF_MORMON);
@@ -109,12 +106,10 @@ fn make_link(verse_path: &scripture_types::VersePath) -> String {
     format!("{}/{}", BASE_URL, url_slug)
 }
 
-// fn extract_highlights(wrapped: &ArrWrap) -> Vec<(usize, usize)> {
 fn extract_highlights((indices, lengths): &(U256, u128)) -> Vec<(u16, u8)> {
     data_bundler::unpack_indices(*indices).iter().cloned().zip(data_bundler::unpack_lengths(*lengths)).collect()
 }
 
-// fn highlight_matches(text: &String, highlights: &Vec<(usize, usize)>) -> String {
 fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
     highlights
         .iter()
@@ -122,7 +117,9 @@ fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
         .fold(text.to_string(), |mut acc, (from, to)| {
             let from_usize = *from as usize;
             let to_usize = from_usize + (*to as usize);
-            let word_to_replace = &acc[from_usize..to_usize];
+            // can't just use the slice because that
+            // runs afoul of intended borrow checker usage.
+            let word_to_replace = String::from(&acc[from_usize..to_usize]);
             acc.replace_range(
                 &from_usize..&to_usize,
                 &format!("<span class=\"match\">{}</span>", word_to_replace),
@@ -134,14 +131,15 @@ fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
 fn format_verse(
     p: &scripture_types::VersePath,
     v: &scripture_types::Verse,
-    // highlights: &Vec<(usize, usize)>,
     highlights: &Vec<(u16, u8)>,
 ) -> String {
+    let mut sorted_highlights = highlights.clone();
+    sorted_highlights.sort(); 
     format!(
         "<li><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"{}\">{}</a>: {}</li>",
         make_link(p),
         &v.reference,
-        highlight_matches(&v.text, highlights),
+        highlight_matches(&v.text, &sorted_highlights),
     )
 }
 
@@ -290,7 +288,6 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
         })
         .fold(
             FnvHashMap::default(),
-            // |mut acc: FnvHashMap<&VersePath, Vec<(usize, usize)>>, (verse_path, highlights)| {
             |mut acc: FnvHashMap<&VersePath, Vec<(u16, u8)>>, (verse_path, highlights)| {
                 let mut highlights_vec = extract_highlights(&highlights);
                 acc.entry(verse_path)
@@ -304,7 +301,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
         .iter()
         .map(|(verse_path, highlights)| {
             let verse = resolve_verse_path(verse_path, &search_preferences);
-            (verse_paths_index[&verse_path], format_verse(verse_path, verse, &highlights))
+            (verse_paths_index[&verse_path], format_verse(verse_path, verse, highlights))
         })
         .collect();
     verses.sort_unstable_by(|a, b| a.cmp(b));
@@ -314,3 +311,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     log!("text search time: {:?}", t_1 - t_0);
     JsValue::from_serde(&sorted_verses).unwrap()
 }
+
+include!("../../data-bundler/data/codegen-paths-index.rs");
+include!("../../data-bundler/data/codegen-words-index.rs");
+
