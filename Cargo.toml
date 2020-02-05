@@ -5,6 +5,7 @@ members = [
   "client",
   "data-bundler",
   "scripture-types",
+  "indices",
 ]
 
 [profile.release]

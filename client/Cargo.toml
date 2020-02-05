@@ -28,6 +28,7 @@ primitive-types = "0.6.2"
 
 scripture-types = { path = "../scripture-types" }
 data-bundler = { path = "../data-bundler" }
+indices = { path = "../indices" }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -54,7 +55,7 @@ wasm-bindgen-test = "0.2"
 lto = true
 # Tell `rustc` to optimize for small code size.
 # opt-level = "s"
-# Tell `rustc` to optimize for small code speed.
+# Tell `rustc` to optimize for code speed.
 opt-level = 3
 
 [dependencies.web-sys]

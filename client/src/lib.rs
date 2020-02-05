@@ -59,7 +59,7 @@ lazy_static! {
         adserde(BIN_DOCTRINE_AND_COVENANTS);
     static ref PEARL_OF_GREAT_PRICE: PearlOfGreatPrice = adserde(BIN_PEARL_OF_GREAT_PRICE);
 
-    static ref VERSE_PATHS_INDEX: VersePathsIndex = scripture_types::paths_to_verse_paths_index(&PHF_PATHS_INDEX);
+    static ref VERSE_PATHS_INDEX: VersePathsIndex = scripture_types::paths_to_verse_paths_index(&indices::PHF_PATHS_INDEX);
 
     static ref STEMMER: rust_stemmers::Stemmer = Stemmer::create(Algorithm::English);
     static ref RE_VERSE_CHARS: Regex = Regex::new(r"[^A-Za-z0-9\sæ\-]").unwrap();
@@ -106,8 +106,8 @@ fn make_link(verse_path: &scripture_types::VersePath) -> String {
     format!("{}/{}", BASE_URL, url_slug)
 }
 
-fn extract_highlights((indices, lengths): &(U256, u128)) -> Vec<(u16, u8)> {
-    data_bundler::unpack_indices(*indices).iter().cloned().zip(data_bundler::unpack_lengths(*lengths)).collect()
+fn extract_highlights((start_indices, lengths): &(U256, u128)) -> Vec<(u16, u8)> {
+    data_bundler::unpack_indices(*start_indices).iter().cloned().zip(data_bundler::unpack_lengths(*lengths)).collect()
 }
 
 fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
@@ -162,8 +162,8 @@ pub fn bootstrap_searcher() {
 
     log!(
         "words: {:?}, paths: {:?}, verse_paths: {:?}",
-        (&PHF_WORDS_INDEX).len(),
-        (&PHF_PATHS_INDEX).len(),
+        (&indices::PHF_WORDS_INDEX).len(),
+        (&indices::PHF_PATHS_INDEX).len(),
         num_verse_paths,
     );
 
@@ -244,7 +244,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     }
 
     log!("accessing paths index");
-    let paths_index = &PHF_PATHS_INDEX;
+    let paths_index = &indices::PHF_PATHS_INDEX;
 
     let search_term = &make_splittable(&search_term_raw.to_lowercase());
 
@@ -257,7 +257,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
         search_stems
             .iter()
             .fold(FnvHashMap::default(), |mut matching_index, term| {
-                if let Some(v) = PHF_WORDS_INDEX.get(term.as_str()) {
+                if let Some(v) = indices::PHF_WORDS_INDEX.get(term.as_str()) {
                     matching_index.insert(term.to_string(), v);
                 }
                 matching_index
@@ -308,10 +308,7 @@ pub fn full_match_search(search_term_raw: String, search_preferences_js: JsValue
     let sorted_verses: Vec<&String> = verses.iter().map(|(_, text)| text).collect();
 
     let t_1 = web_sys::window().unwrap().performance().unwrap().now();
-    log!("text search time: {:?}", t_1 - t_0);
+    log!("search time: {:?}", t_1 - t_0);
     JsValue::from_serde(&sorted_verses).unwrap()
 }
-
-include!("../../data-bundler/data/codegen-paths-index.rs");
-include!("../../data-bundler/data/codegen-words-index.rs");
 

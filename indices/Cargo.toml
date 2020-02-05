@@ -1,0 +1,16 @@
+[package]
+name = "indices"
+version = "0.1.0"
+authors = ["neallred <neallred@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+phf = "0.8.0"
+primitive-types = "0.6.2"
+scripture-types = { path = "../scripture-types" }
+
+[profile.release]
+lto = true
+opt-level = 3

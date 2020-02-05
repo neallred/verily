@@ -164,7 +164,7 @@ fn main() {
 
     writeln!(
         &mut f_codegen,
-        "static PHF_PATHS_INDEX: phf::Map<u16, scripture_types::VersePath> = \n{};\n",
+        "pub static PHF_PATHS_INDEX: phf::Map<u16, scripture_types::VersePath> = \n{};\n",
         paths_index_phf.build(),
     ).unwrap();
 
@@ -201,7 +201,7 @@ fn main() {
 
     writeln!(
         &mut f_codegen_words_index,
-        "static PHF_WORDS_INDEX: phf::Map<&str, phf::Map<u16, (U256,u128)>> = \n{};\n",
+        "pub static PHF_WORDS_INDEX: phf::Map<&str, phf::Map<u16, (U256,u128)>> = \n{};\n",
         words_index_phf.build(),
     ).unwrap();
 }
