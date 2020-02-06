@@ -508,7 +508,7 @@ export default function Preferences({
           right: '-9px',
           padding: '4px 7px',
           borderRadius: '100%',
-          fontWeight: '800',
+          fontWeight: 800,
         }}
         onClick={hidePreferences}
       >&#10799;</button>
