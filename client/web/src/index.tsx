@@ -4,8 +4,6 @@ import * as React from 'react';
 import * as wasm from "wasm-scriptured-client";
 wasm.set_panic_hook();
 
-import NoResult from './NoResult';
-import Result from './Result';
 import Form from './Form';
 import { loadPreferences, SearchPreferences } from './Preferences';
 import { debounce } from './utils';
@@ -47,15 +45,6 @@ function jsPreferencesToWasmPreferences(jsPreferences: SearchPreferences): any {
   };
 }
 
-//       {results.length
-//         ? results.map(x => <Result key={x} displayString={x} />)
-//         : <NoResult
-//           plausibleSearch={searchTerm.length >= SHORTEST_SEARCH_LENGTH}
-//           searchPending={searchPending}
-//           searchTerm={searchTerm}
-//         />
-//       }
-//     </ul>
 const _elementCache: {[key: string]: HTMLElement | null} = {};
 function cachedGetElementById(id: string) { 
   const hit = _elementCache[id];
@@ -66,11 +55,60 @@ function cachedGetElementById(id: string) {
   return _elementCache[id];
 }
 
-const resultList = document.getElementById('scriptured-results');
-
 let BOOTSTRAP_WAIT = 5000;
-const noResults: string[] = [];
 const SHORTEST_SEARCH_LENGTH = 2;
+
+interface CounterRef {
+  previewPath: string;
+  clicks: number;
+  timeout: number;
+}
+const counter: CounterRef = {
+  previewPath: '',
+  clicks: 0,
+  timeout: 0,
+};
+
+const inputTagName = 'LI'
+
+function resetPreview() {
+  if (counter.timeout) {
+    window.clearTimeout(counter.timeout);
+  }
+  counter.previewPath = '';
+  counter.clicks = 0;
+  counter.timeout = 0;
+}
+
+function previewListener(e: MouseEvent) {
+  let itemEl;
+  if ((e as any).target.tagName === inputTagName) {
+    itemEl = e.target;
+  } else if (((e as any).target.parentNode && (e as any).target.parentNode.tagName) === inputTagName) {
+    itemEl = (e.target as any).parentNode;
+  }
+  if (!itemEl) {
+    return
+  }
+  const previewPath = itemEl.dataset.versePath;
+  if (previewPath  === counter.previewPath) {
+    counter.clicks += 1
+  } else {
+    counter.previewPath = previewPath;
+    counter.clicks = 1;
+  }
+  if (counter.clicks >= 4) {
+    console.log('show', previewPath)
+    console.log(wasm.get_chapter_preview(previewPath))
+  };
+
+  if (counter.timeout) {
+    window.clearTimeout(counter.timeout);
+  }
+  const timeout = setTimeout(resetPreview, 4000)
+  counter.timeout = timeout as unknown as number;
+}
+
 function App({}: AppProps) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [preferences, setPreferences] = React.useState(loadPreferences());
@@ -144,7 +182,7 @@ function App({}: AppProps) {
           setPreferences={setPreferences}
           resultCount={resultCount}
         />
-        <ul id="scriptured-results" className="results-section" />
+        <ul id="scriptured-results" className="results-section" onClick={previewListener as any} />
       </div>
     case Bootstrapped.Fail:
       return <div className="fail">

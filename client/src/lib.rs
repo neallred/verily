@@ -128,6 +128,45 @@ fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
         })
 }
 
+fn print_chapter(
+    p: &scripture_types::VersePath,
+) -> Vec<String> {
+    let verses = match p {
+        VersePath::PathOT(b, c, _) => &(&*OLD_TESTAMENT).books[*b as usize].chapters[*c as usize].verses,
+        VersePath::PathNT(b, c, _) => &(&*NEW_TESTAMENT).books[*b as usize].chapters[*c as usize].verses,
+        VersePath::PathBoM(b, c, _) => &(&*BOOK_OF_MORMON).books[*b as usize].chapters[*c as usize].verses,
+        VersePath::PathDC(s, _) => &(&*DOCTRINE_AND_COVENANTS).sections[*s as usize].verses,
+        VersePath::PathPOGP(b, c, _) => &(&*PEARL_OF_GREAT_PRICE).books[*b as usize].chapters[*c as usize].verses,
+    };
+
+    verses
+        .iter()
+        .enumerate()
+        .map(|(i, v)| format!("<li><strong>{}</strong> {}</li>", i, v.text))
+        .collect::<Vec<String>>()
+//        .join(", ")
+}
+
+#[wasm_bindgen]
+pub fn get_chapter_preview(preview_str: String) -> JsValue {
+    log!("value to parse: {:?}", preview_str);
+    let t_0 = web_sys::window().unwrap().performance().unwrap().now();
+
+    match serde_json::from_str(&preview_str) {
+        Ok(p) => {
+            let chapter: Vec<String> = print_chapter(&p);
+            let t_1 = web_sys::window().unwrap().performance().unwrap().now();
+            log!("preview generation time: {:?}", t_1 - t_0);
+            JsValue::from_serde(&chapter).unwrap()
+        }
+        e => {
+            log!("FAIL! {:?}", e);
+            let empty_results: Vec<String> = vec![];
+            JsValue::from_serde(&empty_results).unwrap()
+        }
+    }
+}
+
 fn format_verse(
     p: &scripture_types::VersePath,
     v: &scripture_types::Verse,
@@ -136,7 +175,8 @@ fn format_verse(
     let mut sorted_highlights = highlights.clone();
     sorted_highlights.sort(); 
     format!(
-        "<li><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"{}\">{}</a>: {}</li>",
+        "<li data-verse-path={}><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"{}\">{}</a>: {}</li>",
+        serde_json::to_string(p).unwrap(),//.replace("\"", "\\\"").replace("{", "\\{"),
         make_link(p),
         &v.reference,
         highlight_matches(&v.text, &sorted_highlights),
