@@ -130,7 +130,7 @@ fn highlight_matches(text: &String, highlights: &Vec<(u16, u8)>) -> String {
 
 fn print_chapter(
     p: &scripture_types::VersePath,
-) -> Vec<String> {
+) -> String {
     let verses = match p {
         VersePath::PathOT(b, c, _) => &(&*OLD_TESTAMENT).books[*b as usize].chapters[*c as usize].verses,
         VersePath::PathNT(b, c, _) => &(&*NEW_TESTAMENT).books[*b as usize].chapters[*c as usize].verses,
@@ -139,30 +139,39 @@ fn print_chapter(
         VersePath::PathPOGP(b, c, _) => &(&*PEARL_OF_GREAT_PRICE).books[*b as usize].chapters[*c as usize].verses,
     };
 
-    verses
+    let title = match p {
+        VersePath::PathOT(b, c, _) => &(&*OLD_TESTAMENT).books[*b as usize].chapters[*c as usize].reference,
+        VersePath::PathNT(b, c, _) => &(&*NEW_TESTAMENT).books[*b as usize].chapters[*c as usize].reference,
+        VersePath::PathBoM(b, c, _) => &(&*BOOK_OF_MORMON).books[*b as usize].chapters[*c as usize].reference,
+        VersePath::PathDC(s, _) => &(&*DOCTRINE_AND_COVENANTS).sections[*s as usize].reference,
+        VersePath::PathPOGP(b, c, _) => &(&*PEARL_OF_GREAT_PRICE).books[*b as usize].chapters[*c as usize].reference,
+        
+    };
+
+    let inner = verses
         .iter()
         .enumerate()
-        .map(|(i, v)| format!("<li><strong>{}</strong> {}</li>", i, v.text))
+        .map(|(i, v)| format!("<li><strong>{}</strong>{}</li>", i + 1, v.text))
         .collect::<Vec<String>>()
-//        .join(", ")
+        .join("");
+    format!("<h3 class=\"title\">{}</h3><ul>{}</ul>", title, inner)
 }
 
 #[wasm_bindgen]
-pub fn get_chapter_preview(preview_str: String) -> JsValue {
+pub fn get_chapter_preview(preview_str: String) -> String {
     log!("value to parse: {:?}", preview_str);
     let t_0 = web_sys::window().unwrap().performance().unwrap().now();
 
     match serde_json::from_str(&preview_str) {
         Ok(p) => {
-            let chapter: Vec<String> = print_chapter(&p);
+            let chapter: String = print_chapter(&p);
             let t_1 = web_sys::window().unwrap().performance().unwrap().now();
             log!("preview generation time: {:?}", t_1 - t_0);
-            JsValue::from_serde(&chapter).unwrap()
+            chapter
         }
         e => {
-            log!("FAIL! {:?}", e);
-            let empty_results: Vec<String> = vec![];
-            JsValue::from_serde(&empty_results).unwrap()
+            log!("failure parsing verse path! {:?}", e);
+            String::from("")
         }
     }
 }
@@ -176,7 +185,7 @@ fn format_verse(
     sorted_highlights.sort(); 
     format!(
         "<li data-verse-path={}><a target=\"_blank\" rel=\"noopener noreferrer\" href=\"{}\">{}</a>: {}</li>",
-        serde_json::to_string(p).unwrap(),//.replace("\"", "\\\"").replace("{", "\\{"),
+        serde_json::to_string(p).unwrap(),
         make_link(p),
         &v.reference,
         highlight_matches(&v.text, &sorted_highlights),

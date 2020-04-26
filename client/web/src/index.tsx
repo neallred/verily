@@ -6,6 +6,7 @@ wasm.set_panic_hook();
 
 import Form from './Form';
 import { loadPreferences, SearchPreferences } from './Preferences';
+import overtake from './overtake';
 import { debounce } from './utils';
 
 interface AppProps {
@@ -99,7 +100,7 @@ function previewListener(e: MouseEvent) {
   }
   if (counter.clicks >= 4) {
     console.log('show', previewPath)
-    console.log(wasm.get_chapter_preview(previewPath))
+    overtake(wasm.get_chapter_preview(previewPath))
   };
 
   if (counter.timeout) {
