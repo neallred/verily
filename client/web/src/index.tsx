@@ -99,7 +99,6 @@ function previewListener(e: MouseEvent) {
     counter.clicks = 1;
   }
   if (counter.clicks >= 4) {
-    console.log('show', previewPath)
     overtake(wasm.get_chapter_preview(previewPath))
   };
 

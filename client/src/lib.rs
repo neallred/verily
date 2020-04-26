@@ -159,14 +159,9 @@ fn print_chapter(
 
 #[wasm_bindgen]
 pub fn get_chapter_preview(preview_str: String) -> String {
-    log!("value to parse: {:?}", preview_str);
-    let t_0 = web_sys::window().unwrap().performance().unwrap().now();
-
     match serde_json::from_str(&preview_str) {
         Ok(p) => {
             let chapter: String = print_chapter(&p);
-            let t_1 = web_sys::window().unwrap().performance().unwrap().now();
-            log!("preview generation time: {:?}", t_1 - t_0);
             chapter
         }
         e => {
