@@ -11,5 +11,5 @@ wasm-pack build --release client/
 pushd client/web/
 npm i
 NODE_ENV=production npm run build
+npm start
 popd
-cargo build --release --bin server
