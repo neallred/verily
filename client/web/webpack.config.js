@@ -11,7 +11,7 @@ module.exports = {
   },
   mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
   plugins: [
-    new CopyWebpackPlugin(['./src/_headers', './src/netlify.toml']),
+    new CopyWebpackPlugin(['./src/_headers']),
     new HtmlWebpackPlugin({
       filename: './index.html',
       template: './src/index.html'
